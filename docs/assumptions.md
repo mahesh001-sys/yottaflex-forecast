@@ -104,3 +104,12 @@ Probabilities are proportions internally (`0.10`, `0.25`, `0.50`, `0.80`, `1.00`
 - The fixed seed is `20261022` for both scales. Scale controls volume only; it does not change business logic or outcome rules.
 - Each generation run must record the exact command, scale, and seed in its manifest.
 - The project is intended for development, testing, and demonstration with synthetic data only; real customer, employee, or prospect data must not be introduced into generated datasets.
+
+
+## 12. Forecast scenarios
+
+- Baseline expected revenue is `amount × stage_probability`, using the stage recorded for each opportunity in its forecast snapshot.
+- The pessimistic scenario applies a `0.75` multiplier to baseline stage probability, then applies a separate `0.85` multiplier to expected revenue. Adjusted probability is bounded between 0 and 1.
+- The optimistic scenario applies a `1.20` multiplier to baseline stage probability, capped at `1.00`; expected revenue uses the adjusted probability.
+- Scenarios retain the same snapshot rows, amounts, dates, stages, and territories as the baseline forecast. They are deterministic what-if adjustments, not statistical confidence intervals or calibrated probability estimates.
+- Scenario summaries aggregate scenario detail by scenario, calendar quarter, territory, and stage. Each scenario's summary total must reconcile to its detail total.

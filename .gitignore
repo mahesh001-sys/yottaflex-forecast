@@ -6,3 +6,4 @@ venv/
 .env
 *.sqlite
 *.db
+data/processed/
