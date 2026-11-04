@@ -1,0 +1,7 @@
+stage_id,stage_name,stage_order,default_probability,is_closed_stage
+STAGE-001,Prospecting,1,0.1,False
+STAGE-002,Qualification,2,0.25,False
+STAGE-003,Proposal,3,0.5,False
+STAGE-004,Negotiation,4,0.8,False
+STAGE-005,Closed Won,5,1.0,True
+STAGE-006,Closed Lost,6,0.0,True
