@@ -6,7 +6,7 @@
 - Python 3.11+ is the runtime. The project uses pandas, numpy, pytest, and Python's standard-library `sqlite3`.
 - The fixed random seed is `20261022`. The project has one canonical data generator with `--scale starter|full`; scale changes volume, not business rules.
 - Every module is runnable as `python -m src.<module>`.
-- Generated IDs are deterministic and zero-padded. Required examples include `REP-000001`, `OPP-2026-000001`, `STG-<opportunity-id>-001`, `QUOTA-<rep-id>-2026Q1`, and `FCST-2026-01-31-001`.
+- Generated IDs are deterministic and zero-padded. Canonical formats are: `REP-000001`, `TER-0001`, `ACC-000001`, `OPP-2026-000001`, `STG-<opportunity-id>-001`, `ACT-<opportunity-id>-0001`, `BKG-<opportunity-id>-001`, `QUOTA-<rep-id>-2026Q1`, and `FCST-2026-01-31-001`. Account-level activities without an opportunity use `ACT-<account-id>-0001`; non-opportunity booking adjustments use `BKG-ADJ-000001`.
 - Derived fields are computed from source records. They are not generated independently.
 - State changes are append-only events. Existing history is never overwritten.
 - Anomaly ground truth is stored separately under `data/anomalies/` and is excluded from validation inputs. It may be used only after validation to score anomaly-detection performance.
@@ -95,3 +95,12 @@ Probabilities are proportions internally (`0.10`, `0.25`, `0.50`, `0.80`, `1.00`
 - `HistoricalBooking` may optionally link to an Opportunity to support non-opportunity adjustments, but ordinary new-business/expansion/renewal bookings should link to the Won opportunity that generated them.
 - ForecastSnapshot permits nullable dimension keys to support opportunity-, rep-, territory-, and overall-level snapshots. The implementation must enforce a consistent grain for each `forecast_type`.
 - The exact starter/full row counts are intentionally not fixed in these docs; they belong in the generator specification/manifest so they can evolve without changing business semantics.
+
+
+## 11. Provenance and lawful use
+
+- All project data is synthetic. No external datasets or personal data were used to generate or populate it.
+- The single canonical generator is run as `python -m src.generate_data --scale starter` or `python -m src.generate_data --scale full`.
+- The fixed seed is `20261022` for both scales. Scale controls volume only; it does not change business logic or outcome rules.
+- Each generation run must record the exact command, scale, and seed in its manifest.
+- The project is intended for development, testing, and demonstration with synthetic data only; real customer, employee, or prospect data must not be introduced into generated datasets.

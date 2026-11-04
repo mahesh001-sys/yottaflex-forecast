@@ -5,11 +5,31 @@
 - The system uses synthetic sales data only.
 - All timestamps are stored in UTC using ISO 8601 format; date-only business-effective fields use `DATE`.
 - Monetary amounts are `DECIMAL(14,2)` in USD. Probabilities and rates are `DECIMAL(5,4)` in the range `0.0000`–`1.0000`.
-- Surrogate identifiers are deterministic, zero-padded strings. IDs are generated in stable sort order from the fixed synthetic-data seed (`20261022`), not from runtime randomness.
+- Surrogate identifiers are deterministic, zero-padded strings. IDs are generated in stable sort order from the fixed synthetic-data seed (`20261022`), not from runtime randomness. The canonical formats are listed below and must be used consistently by the generator and exports.
 - Historical state changes are append-only. Current state is derived from the latest applicable event/history row; prior rows are not updated or deleted.
 - `effective_from` is inclusive and `effective_to` is exclusive. A NULL `effective_to` means the assignment remains open-ended.
 - Every entity has `created_at` and, where relevant, source/effective timestamps. These are synthetic timestamps.
 - The table definitions below are a logical relational schema. SQLite implementations may represent `DATE`, `TIMESTAMP`, and `DECIMAL` as validated `TEXT`/`INTEGER`/`NUMERIC` columns because SQLite has dynamic typing.
+
+## 1A. Canonical ID formats
+
+IDs are deterministic, stable, and zero-padded. The generator must assign them in stable source-record order; rerunning with the same seed and scale must reproduce the same IDs.
+
+| Entity | ID format |
+|---|---|
+| SalesRep | `REP-000001` |
+| Territory | `TER-0001` |
+| Account | `ACC-000001` |
+| Opportunity | `OPP-2026-000001` |
+| StageHistory event | `STG-<opportunity-id>-001` |
+| Activity linked to an opportunity | `ACT-<opportunity-id>-0001` |
+| Account-level Activity without an opportunity | `ACT-<account-id>-0001` |
+| Quota | `QUOTA-<rep-id>-2026Q1` |
+| Opportunity-linked HistoricalBooking | `BKG-<opportunity-id>-001` |
+| Non-opportunity booking adjustment | `BKG-ADJ-000001` |
+| ForecastSnapshot | `FCST-2026-01-31-001` |
+
+The literal date/quarter segments identify the relevant cohort, quarter, or snapshot date. Per-parent sequences start at `001` (or `0001` for Activity) and increase without reuse. The account-level Activity and adjustment formats cover the schema's explicitly optional opportunity foreign keys.
 
 ## 2. Tables, primary keys and foreign keys
 
@@ -21,14 +41,14 @@
 - **Lifecycle:** `Active` → `Inactive`; reactivation, if modelled, is a new status event rather than rewriting history.
 
 ### Territory
-- **PK:** `territory_id` (e.g. `TER-000001`).
+- **PK:** `territory_id` (`TER-0001` format).
 - **FKs:** none.
 - **Purpose:** sales geography or coverage unit.
 - **Important fields:** `territory_name`, `region`, `country_code`, `created_at`.
 - **Lifecycle:** `Active` → `Inactive`. Territory identity is stable; changes in coverage are represented through assignments.
 
 ### Account
-- **PK:** `account_id` (e.g. `ACC-000001`).
+- **PK:** `account_id` (`ACC-000001` format).
 - **FKs:** optional `territory_id` → `Territory.territory_id` (current/default territory attribution only).
 - **Purpose:** synthetic customer/prospect organization.
 - **Important fields:** `account_name`, `industry`, `account_status`, `created_at`.
@@ -43,14 +63,14 @@
 - **Outcome:** `Open` while in an open stage; `Won` only in `Closed Won`; `Lost` only in `Closed Lost`. The outcome is derived from stage history under documented transition rules.
 
 ### Stage
-- **PK:** `stage_id` (e.g. `STGDEF-001`).
+- **PK:** `stage_id` (controlled catalogue ID, `STAGE-001` format).
 - **FKs:** none.
 - **Purpose:** controlled stage catalogue.
 - **Important fields:** `stage_name`, `stage_order`, `default_probability`, `is_closed_stage`.
 - **Lifecycle:** reference data; the six configured stage names and probabilities are specified in `assumptions.md`.
 
 ### StageHistory
-- **PK:** `stage_history_id` (e.g. `STH-000001`).
+- **PK:** `stage_history_id` (`STG-<opportunity-id>-001` format; the final sequence is zero-padded to three digits and increments per opportunity).
 - **FKs:** `opportunity_id` → `Opportunity.opportunity_id`; `stage_id` → `Stage.stage_id`; `changed_by_rep_id` → `SalesRep.rep_id` (optional).
 - **Purpose:** append-only record of every opportunity stage transition.
 - **Important fields:** `from_stage_id` (optional FK → `Stage.stage_id`), `to_stage_id` (required FK → `Stage.stage_id`), `changed_at`, `reason`, `event_sequence`.
@@ -58,7 +78,7 @@
 - **Validation:** first event has NULL `from_stage_id` and `to_stage_id = Prospecting`; subsequent event's `from_stage_id` must equal the previous event's `to_stage_id`; transition must be allowed; `event_sequence` increases strictly per opportunity. No history row is overwritten.
 
 ### Activity
-- **PK:** `activity_id` (e.g. `ACT-000001`).
+- **PK:** `activity_id` (`ACT-<opportunity-id>-0001` format for opportunity-linked activities; sequence is zero-padded to four digits and increments per opportunity. For account-level activities without an opportunity, use `ACT-<account-id>-0001`).
 - **FKs:** `opportunity_id` → `Opportunity.opportunity_id` (optional); `account_id` → `Account.account_id` (required); `rep_id` → `SalesRep.rep_id` (required).
 - **Purpose:** synthetic sales touchpoint such as a call, email, meeting, or demo.
 - **Important fields:** `activity_type`, `occurred_at`, `outcome`, `notes`.
@@ -74,7 +94,7 @@
 - **Uniqueness:** one quota per `(rep_id, fiscal_quarter)`; if territory-scoped quotas are later required, revise the uniqueness rule to `(rep_id, territory_id, fiscal_quarter)` explicitly rather than silently allowing duplicates.
 
 ### HistoricalBooking
-- **PK:** `booking_id` (e.g. `BOOK-000001`).
+- **PK:** `booking_id` (`BKG-<opportunity-id>-001` format for opportunity-linked bookings; sequence is zero-padded to three digits and increments per opportunity. For non-opportunity adjustments, use `BKG-ADJ-000001`).
 - **FKs:** `account_id` → `Account.account_id`; `opportunity_id` → `Opportunity.opportunity_id` (optional); `rep_id` → `SalesRep.rep_id`; `territory_id` → `Territory.territory_id`.
 - **Purpose:** immutable synthetic booked-revenue fact at the date it was recognized.
 - **Important fields:** `booking_date`, `booking_amount`, `currency_code`, `booking_type`.
@@ -90,7 +110,7 @@
 - **Validation:** `weighted_amount` is derived from source opportunity amount and the stage probability known at the snapshot cutoff; `actual_amount` is populated only when the period has closed and qualifying booking facts exist. Snapshots are append-only.
 
 ### RepTerritoryAssignment
-- **PK:** `assignment_id` (e.g. `RTA-000001`).
+- **PK:** `assignment_id` (`RTA-000001` format).
 - **FKs:** `rep_id` → `SalesRep.rep_id`; `territory_id` → `Territory.territory_id`.
 - **Purpose:** bridge table tracking which reps cover which territories over time.
 - **Required effective dates:** `effective_from` (inclusive); `effective_to` (exclusive, nullable for current assignment).
@@ -195,3 +215,12 @@ Opportunity 1 ---< ForecastSnapshot (optional snapshot opportunity)
 ```
 
 `RepTerritoryAssignment` is the associative entity that resolves the SalesRep–Territory N:M relationship and preserves effective-dated coverage history.
+
+
+## Provenance and lawful use
+
+- All records produced by this project are synthetic and are created solely for proof-of-concept development, testing, and demonstration.
+- No external datasets, customer records, employee records, personal data, or other real-world source data were used to create the project data.
+- The canonical generator is invoked with `python -m src.generate_data --scale starter` or `python -m src.generate_data --scale full`.
+- The fixed generator seed is `20261022`; the selected scale changes dataset volume only and must not change the documented business rules.
+- The generator command and seed must be recorded in the run manifest so each generated dataset can be reproduced and audited.
