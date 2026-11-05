@@ -91,7 +91,9 @@ metric3.metric("Weighted pipeline", money(weighted_pipeline))
 metric4.metric("Adjusted expected revenue", money(adjusted_revenue))
 
 if "snapshot_date" in filtered.columns:
-    snapshot_dates = pd.to_datetime(filtered["snapshot_date"], errors="coerce").dropna()
+    snapshot_dates = pd.to_datetime(
+        filtered["snapshot_date"], errors="coerce"
+    ).dropna()
     if not snapshot_dates.empty:
         st.caption(f"Snapshot date: {snapshot_dates.max().date()}")
 
@@ -140,7 +142,9 @@ else:
     for column in ["scenario", "quarter", "territory_id"]:
         if column not in scenario_view.columns:
             scenario_view[column] = "Unknown"
-        scenario_view[column] = scenario_view[column].fillna("Unknown").astype(str)
+        scenario_view[column] = (
+            scenario_view[column].fillna("Unknown").astype(str)
+        )
 
     scenario_view = scenario_view[
         scenario_view["quarter"].isin(selected_quarters)
@@ -222,19 +226,30 @@ else:
             if column in accuracy_view.columns
         ]
 
-        if "wape_pct" in accuracy_view.columns:
-            wape_chart = accuracy_view.copy()
-            wape_chart["accuracy_group"] = (
-                wape_chart["model"].astype(str)
-                + " | "
-                + wape_chart["horizon_bucket"].astype(str)
-                + " | "
-                + wape_chart["segment_type"].astype(str)
-            )
-            st.caption("WAPE by model, horizon, and segment")
-            st.bar_chart(
-                wape_chart.set_index("accuracy_group")["wape_pct"]
-            )
+        # Keep the chart readable by plotting overall WAPE only.
+        if {"wape_pct", "segment_type", "model", "horizon_bucket"}.issubset(
+            accuracy_view.columns
+        ):
+            overall_wape = accuracy_view[
+                accuracy_view["segment_type"].astype(str).str.lower() == "overall"
+            ].copy()
+
+            if not overall_wape.empty:
+                overall_wape["chart_label"] = (
+                    overall_wape["model"].astype(str)
+                    + " | "
+                    + overall_wape["horizon_bucket"].astype(str)
+                )
+                overall_wape = overall_wape.sort_values(
+                    ["horizon_bucket", "model"]
+                )
+
+                st.caption("Overall WAPE by model and snapshot-to-close horizon")
+                st.bar_chart(
+                    overall_wape.set_index("chart_label")["wape_pct"]
+                )
+            else:
+                st.info("Overall WAPE rows are not available for the selected filters.")
 
         st.dataframe(
             accuracy_view[accuracy_cols],
@@ -255,4 +270,6 @@ else:
         use_container_width=True,
         hide_index=True,
     )
-    st.caption("For Brier score, lower values indicate better probability predictions.")
+    st.caption(
+        "For Brier score, lower values indicate better probability predictions."
+    )

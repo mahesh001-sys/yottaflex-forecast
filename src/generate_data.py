@@ -164,11 +164,12 @@ def _make_opportunities(
     assignments: pd.DataFrame,
     rng: np.random.Generator,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Create opportunities and their event history/activity, with activity driving wins."""
+    """Create opportunities and event history/activity, with activity driving wins."""
     rep_ids = reps["rep_id"].tolist()
     account_ids = accounts["account_id"].tolist()
     assignment_rows = assignments.to_dict("records")
     rep_number = {rep_id: int(rep_id[-6:]) for rep_id in rep_ids}
+
     day_values = pd.date_range(START_DATE, END_DATE, freq="D")
     weights = np.array([QUARTER_INDEX[d.quarter] for d in day_values], dtype=float)
     weights /= weights.sum()
@@ -196,6 +197,7 @@ def _make_opportunities(
             rep_assignments[0],
         )
         territory_id = active_assignment["territory_id"]
+
         expected_close = min(
             created + pd.Timedelta(days=int(rng.integers(30, 181))),
             AS_OF_DATE + pd.Timedelta(days=180),
@@ -204,8 +206,6 @@ def _make_opportunities(
         opportunity_id = f"OPP-{created.year}-{i + 1:06d}"
         tier = _activity_tier(rep_number[rep_id])
 
-        # Activity is generated before the outcome. More meaningful touches raise the
-        # probability of reaching Won; activity is still synthetic and reproducible.
         n_activity = int(rng.integers(2, 9))
         activity_days = sorted(
             set(
@@ -215,11 +215,13 @@ def _make_opportunities(
         )
         if not activity_days:
             activity_days = [0]
+
         touch_score = sum(
             1.0 if (j % 3) != 0 else 1.4
             for j, _ in enumerate(activity_days)
         ) + (tier - 2) * 1.5
         effective_age = age_days + (tier - 2) * 35
+
         if effective_age < 45:
             path = ["Prospecting"]
         elif effective_age < 110:
@@ -229,7 +231,6 @@ def _make_opportunities(
         elif effective_age < 285:
             path = ["Prospecting", "Qualification", "Proposal", "Negotiation"]
         else:
-            # A high touch score and sufficient age are required for a Won outcome.
             terminal = (
                 "Closed Won"
                 if touch_score >= 8.0 and effective_age >= 330
@@ -253,15 +254,32 @@ def _make_opportunities(
                 "outcome": "Completed",
             })
 
+        # Closed opportunities receive a deterministic, varied close age.
+        # Open opportunities continue to use their age as of AS_OF_DATE.
+        is_closed = path[-1] in {"Closed Won", "Closed Lost"}
+        if is_closed:
+            latest_close_age = max(30, min(age_days, 240))
+            close_age_days = int(rng.integers(30, latest_close_age + 1))
+        else:
+            close_age_days = age_days
+
+        final_event_date = None
         for seq, stage_name in enumerate(path, start=1):
-            if seq == 1:
+            if is_closed:
+                # Spread the lifecycle events from creation through the close date.
+                event_day = int(
+                    close_age_days * (seq - 1) / max(1, len(path) - 1)
+                )
+            elif seq == 1:
                 event_day = 0
             else:
                 event_day = min(
                     max(0, int(age_days * seq / max(1, len(path)))),
                     age_days,
                 )
+
             changed_at = created + pd.Timedelta(days=event_day)
+            final_event_date = changed_at
             history.append({
                 "stage_history_id": f"STG-{opportunity_id}-{seq:03d}",
                 "opportunity_id": opportunity_id,
@@ -278,7 +296,12 @@ def _make_opportunities(
             "Won" if terminal == "Closed Won"
             else ("Lost" if terminal == "Closed Lost" else "Open")
         )
-        closed_date = history[-1]["changed_at"][:10] if outcome != "Open" else None
+        closed_date = (
+            final_event_date.strftime("%Y-%m-%d")
+            if outcome != "Open" and final_event_date is not None
+            else None
+        )
+
         rows.append({
             "opportunity_id": opportunity_id,
             "opportunity_name": f"{PRODUCTS[i % len(PRODUCTS)]} opportunity {i + 1:06d}",
@@ -299,6 +322,7 @@ def _make_opportunities(
     opportunities = pd.DataFrame(rows)
     stage_history = pd.DataFrame(history)
     activity = pd.DataFrame(activities)
+
     won_accounts = set(
         opportunities.loc[opportunities["outcome"] == "Won", "account_id"]
     )
@@ -306,6 +330,7 @@ def _make_opportunities(
     accounts.loc[
         accounts["account_id"].isin(won_accounts), "account_status"
     ] = "Customer"
+
     return opportunities, stage_history, activity, accounts
 
 
@@ -352,8 +377,6 @@ def _make_snapshots(
     activity = activity.copy()
     activity["event_date"] = pd.to_datetime(activity["activity_date"])
 
-    # Sort each opportunity's activity dates once. This avoids repeatedly
-    # filtering the entire activity table for every opportunity and snapshot.
     activity_dates = {
         opp_id: group["event_date"].sort_values().to_numpy(dtype="datetime64[ns]")
         for opp_id, group in activity.groupby("opportunity_id")
@@ -412,7 +435,6 @@ def _make_snapshots(
                 else int((snapshot_date - opp.created_date).days)
             )
 
-            # Deterministic slippage based only on prior activity and stage events.
             pushes = max(0, (stale_days - 30) // 30)
             close_date = opp.expected_close_date + pd.Timedelta(days=30 * pushes)
             key = snapshot_date.strftime("%Y-%m-%d")

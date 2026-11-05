@@ -1,0 +1,32 @@
+[
+  {
+    "issue_type": "close_date_before_creation",
+    "table": "opportunity",
+    "record_id": "OPP-2026-000003",
+    "description": "closed_date is one day before created_date."
+  },
+  {
+    "issue_type": "mixed_currency",
+    "table": "opportunity",
+    "record_id": "OPP-2026-000001",
+    "description": "currency_code is EUR in a USD dataset."
+  },
+  {
+    "issue_type": "stage_probability_mismatch",
+    "table": "forecast_snapshot",
+    "record_id": "FCST-2025-01-31-001",
+    "description": "stage_probability differs from the default probability for stage_id."
+  },
+  {
+    "issue_type": "future_information_leak",
+    "table": "forecast_snapshot",
+    "record_id": "FCST-2025-01-31-002",
+    "description": "Snapshot stage was replaced with a later stage from the opportunity's history."
+  },
+  {
+    "issue_type": "duplicate_opportunity",
+    "table": "forecast_snapshot",
+    "record_id": "FCST-2025-01-31-003-ANOM",
+    "description": "A second row repeats the same opportunity_id on the same snapshot_date."
+  }
+]

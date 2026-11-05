@@ -1,0 +1,70 @@
+{
+  "files": [
+    {
+      "file_size_bytes": 174573,
+      "filename": "account.csv",
+      "row_count": 2000,
+      "sha256": "b8dc6596a8ea980ef9df75d25513013564cf9d278f54c2705a43d3c8a3722ec5"
+    },
+    {
+      "file_size_bytes": 10454433,
+      "filename": "activity.csv",
+      "row_count": 98008,
+      "sha256": "35d2337b20318aa4d1c02dc100e14e9e4f1e8c065d9262fc4d6a6b2acadc8791"
+    },
+    {
+      "file_size_bytes": 14830320,
+      "filename": "forecast_snapshot.csv",
+      "row_count": 151660,
+      "sha256": "6fac6b721287b871e0c5ba85ef7b1156082c158dc29e6d15dfa32f440008ad18"
+    },
+    {
+      "file_size_bytes": 222461,
+      "filename": "historical_booking.csv",
+      "row_count": 2659,
+      "sha256": "fde341c7a69798bcafb5f8bf96f6f5c9be24f258108967014b27725101247c22"
+    },
+    {
+      "file_size_bytes": 2924781,
+      "filename": "opportunity.csv",
+      "row_count": 20000,
+      "sha256": "63b4247156c98b8db6c6315f0aee7cb6004089cda44d64ea32c4fc1b074bf13f"
+    },
+    {
+      "file_size_bytes": 912059,
+      "filename": "quota.csv",
+      "row_count": 16000,
+      "sha256": "136876870c31c289bdf50d3c5becfd19436a4d14673e84b71255825e3a4a53ad"
+    },
+    {
+      "file_size_bytes": 109663,
+      "filename": "rep_territory_assignment.csv",
+      "row_count": 2400,
+      "sha256": "93432097d6f0a4442fe4037b6bfe2d3494a429f9b2e7af60c85fc053d83b7b8f"
+    },
+    {
+      "file_size_bytes": 200062,
+      "filename": "sales_rep.csv",
+      "row_count": 2000,
+      "sha256": "e0bd024b00b853cc53ba76ffc4f15e04442bea6291d3ca6b00661f5bf5b1e23d"
+    },
+    {
+      "file_size_bytes": 276,
+      "filename": "stage.csv",
+      "row_count": 6,
+      "sha256": "4a76240fedd0c0ec3803d6db678f380cfcd9372423fa5ce920f522d273af828e"
+    },
+    {
+      "file_size_bytes": 11633985,
+      "filename": "stage_history.csv",
+      "row_count": 81475,
+      "sha256": "9f75149403b9795f254f35a94a273384274acdcc7d8c4178443eaa99e49728af"
+    },
+    {
+      "file_size_bytes": 305,
+      "filename": "territory.csv",
+      "row_count": 4,
+      "sha256": "9f64acaba4e8d5c1d2d22f3cd7e58d6150df4174eedae254cccc6bbfb2a90a18"
+    }
+  ]
+}

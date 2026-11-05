@@ -1,4 +1,6 @@
-anomaly_id,fixture_file,table_name,record_key,anomaly_type,field_name,expected_value,injected_value
-ANOM-001,duplicate_opportunity_id.csv,opportunity,OPP-2026-000001,duplicate_primary_key,opportunity_id,OPP-2026-000001,OPP-2026-000001
-ANOM-002,invalid_currency.csv,opportunity,OPP-2026-000001,invalid_currency,currency_code,USD,EUR
-ANOM-003,out_of_range_created_date.csv,opportunity,OPP-2026-000001,out_of_range_date,created_date,2026-08-08,2027-01-01
+issue_type,table,record_id,description
+close_date_before_creation,opportunity,OPP-2026-000003,closed_date is one day before created_date.
+mixed_currency,opportunity,OPP-2026-000001,currency_code is EUR in a USD dataset.
+stage_probability_mismatch,forecast_snapshot,FCST-2025-01-31-001,stage_probability differs from the default probability for stage_id.
+future_information_leak,forecast_snapshot,FCST-2025-01-31-002,Snapshot stage was replaced with a later stage from the opportunity's history.
+duplicate_opportunity,forecast_snapshot,FCST-2025-01-31-003-ANOM,A second row repeats the same opportunity_id on the same snapshot_date.
