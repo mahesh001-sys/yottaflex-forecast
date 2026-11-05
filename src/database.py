@@ -1,4 +1,3 @@
-
 import argparse
 import csv
 import sqlite3
@@ -8,7 +7,6 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-# Actual CSV columns and SQLite data types.
 TABLE_COLUMNS = {
     "territory": {
         "territory_id": "TEXT",
@@ -126,7 +124,6 @@ PRIMARY_KEYS = {
     "forecast_snapshot": "forecast_snapshot_id",
 }
 
-# Child table, child column, parent table, parent column.
 FOREIGN_KEYS = [
     ("account", "territory_id", "territory", "territory_id"),
     ("rep_territory_assignment", "rep_id", "sales_rep", "rep_id"),
@@ -150,7 +147,6 @@ FOREIGN_KEYS = [
     ("forecast_snapshot", "stage_id", "stage", "stage_id"),
 ]
 
-# Parent tables must be loaded before their dependent tables.
 LOAD_ORDER = [
     "territory",
     "stage",
@@ -215,7 +211,6 @@ def create_schema(connection):
         )
         connection.execute(sql)
 
-    # Index every foreign-key column used in joins.
     for child, child_col, _, _ in FOREIGN_KEYS:
         index_name = f"idx_{child}_{child_col}"
         connection.execute(
@@ -275,11 +270,17 @@ def load_table(connection, data_dir, table):
 def write_seed_sql(connection, output_path):
     """Write a complete SQL dump that can recreate the database."""
     with output_path.open("w", encoding="utf-8", newline="\n") as file:
-        file.write("PRAGMA foreign_keys = ON;\n\n")
+        # The SQLite iterdump output creates and populates tables
+        # alphabetically. Some child tables therefore appear before
+        # their parent tables. Disable FK enforcement during import.
+        file.write("PRAGMA foreign_keys = OFF;\n\n")
 
         for statement in connection.iterdump():
             file.write(statement)
             file.write("\n")
+
+        # The dump ends with COMMIT. Re-enable FK enforcement afterward.
+        file.write("\nPRAGMA foreign_keys = ON;\n")
 
 
 def build_database(data_dir, output_dir):
@@ -307,7 +308,6 @@ def build_database(data_dir, output_dir):
             total_rows += count
             print(f"{table:<30} {count:>10,} rows")
 
-        # Verify all foreign-key relationships before committing.
         violations = connection.execute(
             "PRAGMA foreign_key_check"
         ).fetchall()

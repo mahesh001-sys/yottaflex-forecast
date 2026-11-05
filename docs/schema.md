@@ -1,226 +1,381 @@
 # Data Schema
 
-## 1. Conventions
+## 1. Scope and conventions
 
-- The system uses synthetic sales data only.
-- All timestamps are stored in UTC using ISO 8601 format; date-only business-effective fields use `DATE`.
-- Monetary amounts are `DECIMAL(14,2)` in USD. Probabilities and rates are `DECIMAL(5,4)` in the range `0.0000`–`1.0000`.
-- Surrogate identifiers are deterministic, zero-padded strings. IDs are generated in stable sort order from the fixed synthetic-data seed (`20261022`), not from runtime randomness. The canonical formats are listed below and must be used consistently by the generator and exports.
-- Historical state changes are append-only. Current state is derived from the latest applicable event/history row; prior rows are not updated or deleted.
-- `effective_from` is inclusive and `effective_to` is exclusive. A NULL `effective_to` means the assignment remains open-ended.
-- Every entity has `created_at` and, where relevant, source/effective timestamps. These are synthetic timestamps.
-- The table definitions below are a logical relational schema. SQLite implementations may represent `DATE`, `TIMESTAMP`, and `DECIMAL` as validated `TEXT`/`INTEGER`/`NUMERIC` columns because SQLite has dynamic typing.
+- All project records are synthetic and generated deterministically.
+- The implemented schema describes the actual CSV outputs produced by `src/generate_data.py`.
+- The dataset uses USD for monetary values.
+- Date fields use ISO 8601 `YYYY-MM-DD` format.
+- Monetary values are represented as numeric decimal values with two decimal places.
+- Probabilities are numeric values between `0.0` and `1.0`.
+- Primary keys are deterministic string identifiers.
+- Foreign keys reference identifiers in the related parent tables.
+- `NULL` represents an optional or unavailable value.
+- `StageHistory` records opportunity stage changes as separate history rows.
+- Forecast snapshots are opportunity-level records reconstructed using information available on each snapshot date.
+- The fixed default generator seed is `20261022`.
 
-## 1A. Canonical ID formats
+### Dataset scales
 
-IDs are deterministic, stable, and zero-padded. The generator must assign them in stable source-record order; rerunning with the same seed and scale must reproduce the same IDs.
+| Scale | Territories | Sales representatives | Accounts | Opportunities |
+|---|---:|---:|---:|---:|
+| Starter | 4 | 20 | 20 | 200 |
+| Full | 4 | 2,000 | 2,000 | 20,000 |
 
-| Entity | ID format |
+The generator supports a seed argument through its Python function. The command-line interface uses the documented default seed.
+
+## 2. Canonical identifier formats
+
+| Entity | Primary key | Format |
+|---|---|---|
+| SalesRep | `rep_id` | `REP-000001` |
+| Territory | `territory_id` | `TER-0001` |
+| Account | `account_id` | `ACC-000001` |
+| Opportunity | `opportunity_id` | `OPP-2026-000001` |
+| Stage | `stage_id` | `STAGE-001` |
+| StageHistory | `stage_history_id` | `STG-<opportunity-id>-001` |
+| Activity | `activity_id` | `ACT-<opportunity-id>-001` |
+| Quota | `quota_id` | `QUOTA-<rep-id>-2025Q1` |
+| HistoricalBooking | `booking_id` | `BOOK-<opportunity-id>` |
+| ForecastSnapshot | `forecast_snapshot_id` | `FCST-2025-01-31-001` |
+| RepTerritoryAssignment | `assignment_id` | `RTA-000001` |
+
+Sequences are generated deterministically. The date and quarter portions identify the relevant creation cohort, snapshot date, or fiscal quarter.
+
+## 3. Implemented tables
+
+### 3.1 SalesRep
+
+**Purpose:** Stores synthetic sales representative master records.
+
+- Primary key: `rep_id`
+- Foreign keys: None
+
+| Field | Description |
 |---|---|
-| SalesRep | `REP-000001` |
-| Territory | `TER-0001` |
-| Account | `ACC-000001` |
-| Opportunity | `OPP-2026-000001` |
-| StageHistory event | `STG-<opportunity-id>-001` |
-| Activity linked to an opportunity | `ACT-<opportunity-id>-0001` |
-| Account-level Activity without an opportunity | `ACT-<account-id>-0001` |
-| Quota | `QUOTA-<rep-id>-2026Q1` |
-| Opportunity-linked HistoricalBooking | `BKG-<opportunity-id>-001` |
-| Non-opportunity booking adjustment | `BKG-ADJ-000001` |
-| ForecastSnapshot | `FCST-2026-01-31-001` |
+| `rep_id` | Unique sales representative identifier |
+| `rep_name` | Synthetic representative name |
+| `email` | Synthetic email address |
+| `hire_date` | Representative hire date |
+| `employment_status` | Employment status |
+| `created_at` | Synthetic record creation timestamp |
 
-The literal date/quarter segments identify the relevant cohort, quarter, or snapshot date. Per-parent sequences start at `001` (or `0001` for Activity) and increase without reuse. The account-level Activity and adjustment formats cover the schema's explicitly optional opportunity foreign keys.
+Generated employment status: `Active`.
 
-## 2. Tables, primary keys and foreign keys
+### 3.2 Territory
 
-### SalesRep
-- **PK:** `rep_id` (`REP-000001` format).
-- **FKs:** none.
-- **Purpose:** synthetic sales representative master record.
-- **Important fields:** `rep_name`, `email`, `hire_date`, `employment_status`, `created_at`.
-- **Lifecycle:** `Active` → `Inactive`; reactivation, if modelled, is a new status event rather than rewriting history.
+**Purpose:** Defines sales territories and their geographic classification.
 
-### Territory
-- **PK:** `territory_id` (`TER-0001` format).
-- **FKs:** none.
-- **Purpose:** sales geography or coverage unit.
-- **Important fields:** `territory_name`, `region`, `country_code`, `created_at`.
-- **Lifecycle:** `Active` → `Inactive`. Territory identity is stable; changes in coverage are represented through assignments.
+- Primary key: `territory_id`
+- Foreign keys: None
 
-### Account
-- **PK:** `account_id` (`ACC-000001` format).
-- **FKs:** optional `territory_id` → `Territory.territory_id` (current/default territory attribution only).
-- **Purpose:** synthetic customer/prospect organization.
-- **Important fields:** `account_name`, `industry`, `account_status`, `created_at`.
-- **Lifecycle:** `Prospect` → `Customer` or `Disqualified`; account conversion is derived from related opportunity outcomes, not independently randomized.
+| Field | Description |
+|---|---|
+| `territory_id` | Unique territory identifier |
+| `territory_name` | Territory name |
+| `region` | Geographic region |
+| `country_code` | Country code |
+| `status` | Territory status |
+| `created_at` | Synthetic record creation timestamp |
 
-### Opportunity
-- **PK:** `opportunity_id` (`OPP-2026-000001` format; year segment is the opportunity creation cohort year).
-- **FKs:** `account_id` → `Account.account_id` (required); `owner_rep_id` → `SalesRep.rep_id` (required); `territory_id` → `Territory.territory_id` (required); optional `source_opportunity_id` → `Opportunity.opportunity_id` for explicitly modelled renewals/expansions.
-- **Purpose:** sales pursuit and its current derived state.
-- **Important fields:** `opportunity_name`, `created_date`, `expected_close_date`, `amount`, `currency_code`, `current_stage`, `closed_date`, `outcome`.
-- **Lifecycle:** `Prospecting` → `Qualification` → `Proposal` → `Negotiation` → `Closed Won` or `Closed Lost`. A deal may remain in its current open stage, or move forward one stage at a time. Reopening a closed deal is not an allowed transition in this POC; create a new linked opportunity if needed.
-- **Outcome:** `Open` while in an open stage; `Won` only in `Closed Won`; `Lost` only in `Closed Lost`. The outcome is derived from stage history under documented transition rules.
+Generated regions: `North`, `South`, `East`, `West`.
 
-### Stage
-- **PK:** `stage_id` (controlled catalogue ID, `STAGE-001` format).
-- **FKs:** none.
-- **Purpose:** controlled stage catalogue.
-- **Important fields:** `stage_name`, `stage_order`, `default_probability`, `is_closed_stage`.
-- **Lifecycle:** reference data; the six configured stage names and probabilities are specified in `assumptions.md`.
+Generated territory status: `Active`.
 
-### StageHistory
-- **PK:** `stage_history_id` (`STG-<opportunity-id>-001` format; the final sequence is zero-padded to three digits and increments per opportunity).
-- **FKs:** `opportunity_id` → `Opportunity.opportunity_id`; `stage_id` → `Stage.stage_id`; `changed_by_rep_id` → `SalesRep.rep_id` (optional).
-- **Purpose:** append-only record of every opportunity stage transition.
-- **Important fields:** `from_stage_id` (optional FK → `Stage.stage_id`), `to_stage_id` (required FK → `Stage.stage_id`), `changed_at`, `reason`, `event_sequence`.
-- **Cardinality:** one Opportunity has 1:N StageHistory rows; each Stage can be referenced by 1:N history rows as a source and/or destination.
-- **Validation:** first event has NULL `from_stage_id` and `to_stage_id = Prospecting`; subsequent event's `from_stage_id` must equal the previous event's `to_stage_id`; transition must be allowed; `event_sequence` increases strictly per opportunity. No history row is overwritten.
+### 3.3 Account
 
-### Activity
-- **PK:** `activity_id` (`ACT-<opportunity-id>-0001` format for opportunity-linked activities; sequence is zero-padded to four digits and increments per opportunity. For account-level activities without an opportunity, use `ACT-<account-id>-0001`).
-- **FKs:** `opportunity_id` → `Opportunity.opportunity_id` (optional); `account_id` → `Account.account_id` (required); `rep_id` → `SalesRep.rep_id` (required).
-- **Purpose:** synthetic sales touchpoint such as a call, email, meeting, or demo.
-- **Important fields:** `activity_type`, `occurred_at`, `outcome`, `notes`.
-- **Cardinality:** Account 1:N Activity; SalesRep 1:N Activity; Opportunity 0..1:N Activity (an activity can be account-level without being linked to an opportunity).
-- **Validation:** if `opportunity_id` is present, its `account_id` must match the activity's `account_id`.
+**Purpose:** Stores synthetic customer and prospect organizations.
 
-### Quota
-- **PK:** `quota_id` (`QUOTA-<rep-id>-2026Q1` format).
-- **FKs:** `rep_id` → `SalesRep.rep_id` (required); optional `territory_id` → `Territory.territory_id`.
-- **Purpose:** quarterly sales target for a representative, optionally scoped to a territory.
-- **Important fields:** `fiscal_quarter`, `quota_amount`, `currency_code`, `created_at`.
-- **Cardinality:** SalesRep 1:N Quota; Territory 0..1:N Quota.
-- **Uniqueness:** one quota per `(rep_id, fiscal_quarter)`; if territory-scoped quotas are later required, revise the uniqueness rule to `(rep_id, territory_id, fiscal_quarter)` explicitly rather than silently allowing duplicates.
+- Primary key: `account_id`
+- Foreign key: `territory_id` → `Territory.territory_id`
 
-### HistoricalBooking
-- **PK:** `booking_id` (`BKG-<opportunity-id>-001` format for opportunity-linked bookings; sequence is zero-padded to three digits and increments per opportunity. For non-opportunity adjustments, use `BKG-ADJ-000001`).
-- **FKs:** `account_id` → `Account.account_id`; `opportunity_id` → `Opportunity.opportunity_id` (optional); `rep_id` → `SalesRep.rep_id`; `territory_id` → `Territory.territory_id`.
-- **Purpose:** immutable synthetic booked-revenue fact at the date it was recognized.
-- **Important fields:** `booking_date`, `booking_amount`, `currency_code`, `booking_type`.
-- **Cardinality:** Account 1:N HistoricalBooking; SalesRep 1:N HistoricalBooking; Territory 1:N HistoricalBooking; Opportunity 0..1:N HistoricalBooking.
-- **Validation:** a booking linked to an opportunity must reference a `Closed Won` opportunity and its amount/date must satisfy the booking recognition rule. Corrections are represented by compensating booking rows, not updates/deletes.
+| Field | Description |
+|---|---|
+| `account_id` | Unique account identifier |
+| `account_name` | Synthetic account name |
+| `industry` | Account industry |
+| `account_status` | Prospect or customer status |
+| `territory_id` | Assigned territory |
+| `created_at` | Synthetic record creation timestamp |
 
-### ForecastSnapshot
-- **PK:** `forecast_id` (`FCST-2026-01-31-001` format; date segment is the snapshot date).
-- **FKs:** `rep_id` → `SalesRep.rep_id` (optional for aggregate snapshots); `territory_id` → `Territory.territory_id` (optional); `opportunity_id` → `Opportunity.opportunity_id` (optional for aggregate snapshots).
-- **Purpose:** immutable point-in-time forecast output.
-- **Important fields:** `snapshot_date`, `period_start`, `period_end`, `forecast_type`, `source_amount`, `weighted_amount`, `actual_amount`, `model_version`, `created_at`.
-- **Cardinality:** Rep/Territory/Opportunity each 0..1:N ForecastSnapshot. A snapshot row may be opportunity-level, rep-level, territory-level, or overall; the grain is identified by `forecast_type` and nullable dimension keys.
-- **Validation:** `weighted_amount` is derived from source opportunity amount and the stage probability known at the snapshot cutoff; `actual_amount` is populated only when the period has closed and qualifying booking facts exist. Snapshots are append-only.
+Generated industries include Technology, Healthcare, Manufacturing, Retail, Finance, Education, Logistics, and Telecommunications.
 
-### RepTerritoryAssignment
-- **PK:** `assignment_id` (`RTA-000001` format).
-- **FKs:** `rep_id` → `SalesRep.rep_id`; `territory_id` → `Territory.territory_id`.
-- **Purpose:** bridge table tracking which reps cover which territories over time.
-- **Required effective dates:** `effective_from` (inclusive); `effective_to` (exclusive, nullable for current assignment).
-- **Cardinality:** SalesRep N:M Territory through RepTerritoryAssignment. Each Rep and each Territory has 1:N assignment rows over time.
-- **Validation:** `effective_to` must be later than `effective_from`; assignments for the same rep/territory cannot overlap; a rep cannot have overlapping active assignments to conflicting territories unless an explicit multi-territory policy is adopted. Historical rows are closed by appending an assignment-end event or by maintaining an immutable assignment record plus a separate event log; do not silently rewrite past coverage.
+Generated account statuses: `Prospect`, `Customer`.
 
-## 3. Relationships and cardinality summary
+Accounts linked to a won opportunity can be marked as customers.
 
-| Parent | Child / bridge | Cardinality | Optionality |
+### 3.4 Opportunity
+
+**Purpose:** Represents a synthetic sales opportunity and its current derived state.
+
+- Primary key: `opportunity_id`
+- Foreign keys:
+  - `account_id` → `Account.account_id`
+  - `owner_rep_id` → `SalesRep.rep_id`
+  - `territory_id` → `Territory.territory_id`
+  - `source_opportunity_id` → `Opportunity.opportunity_id` (nullable self-reference)
+
+| Field | Description |
+|---|---|
+| `opportunity_id` | Unique opportunity identifier |
+| `opportunity_name` | Synthetic opportunity name |
+| `account_id` | Associated account |
+| `owner_rep_id` | Owning sales representative |
+| `territory_id` | Territory assigned at opportunity creation |
+| `source_opportunity_id` | Optional source opportunity reference |
+| `created_date` | Opportunity creation date |
+| `expected_close_date` | Expected close date |
+| `amount` | Opportunity amount in USD |
+| `currency_code` | Currency code |
+| `product` | Associated product |
+| `current_stage` | Current/final stage name |
+| `closed_date` | Closing date; nullable for open opportunities |
+| `outcome` | Opportunity outcome |
+
+Generated products: `Platform`, `Analytics`, `Automation`, `Integration`, `Support`.
+
+Generated outcomes: `Open`, `Won`, `Lost`.
+
+The `current_stage` field stores the stage name, not the stage identifier. Stage identifiers and transition history are stored in `Stage` and `StageHistory`.
+
+`source_opportunity_id` is nullable and is currently generated as NULL.
+
+### 3.5 Stage
+
+**Purpose:** Defines the controlled sales pipeline stages.
+
+- Primary key: `stage_id`
+- Foreign keys: None
+
+| Field | Description |
+|---|---|
+| `stage_id` | Unique stage identifier |
+| `stage_name` | Stage name |
+| `stage_order` | Pipeline order |
+| `default_probability` | Default probability for the stage |
+| `is_closed_stage` | Whether the stage is terminal |
+
+The six configured stages are:
+
+| Stage ID | Stage name | Order | Probability | Closed stage |
+|---|---|---:|---:|---|
+| STAGE-001 | Prospecting | 1 | 0.10 | No |
+| STAGE-002 | Qualification | 2 | 0.25 | No |
+| STAGE-003 | Proposal | 3 | 0.50 | No |
+| STAGE-004 | Negotiation | 4 | 0.80 | No |
+| STAGE-005 | Closed Won | 5 | 1.00 | Yes |
+| STAGE-006 | Closed Lost | 6 | 0.00 | Yes |
+
+### 3.6 StageHistory
+
+**Purpose:** Stores the sequence of opportunity stage transitions.
+
+- Primary key: `stage_history_id`
+- Foreign keys:
+  - `opportunity_id` → `Opportunity.opportunity_id`
+  - `from_stage_id` → `Stage.stage_id` (nullable for the initial event)
+  - `to_stage_id` → `Stage.stage_id`
+  - `changed_by_rep_id` → `SalesRep.rep_id`
+
+| Field | Description |
+|---|---|
+| `stage_history_id` | Unique stage history event identifier |
+| `opportunity_id` | Associated opportunity |
+| `from_stage_id` | Previous stage; NULL for the initial event |
+| `to_stage_id` | New stage |
+| `changed_by_rep_id` | Representative associated with the change |
+| `changed_at` | Stage transition timestamp |
+| `reason` | Synthetic transition reason |
+| `event_sequence` | Sequence number within the opportunity history |
+
+Each opportunity has an ordered stage history.
+
+The initial event has a NULL `from_stage_id`. Subsequent events record the previous and new stage identifiers.
+
+Stage history is used to reconstruct the opportunity's stage as of a historical cutoff date.
+
+### 3.7 Activity
+
+**Purpose:** Stores synthetic sales activities associated with opportunities and representatives.
+
+- Primary key: `activity_id`
+- Foreign keys:
+  - `opportunity_id` → `Opportunity.opportunity_id`
+  - `rep_id` → `SalesRep.rep_id`
+
+| Field | Description |
+|---|---|
+| `activity_id` | Unique activity identifier |
+| `opportunity_id` | Associated opportunity |
+| `rep_id` | Representative performing the activity |
+| `activity_type` | Activity category |
+| `activity_date` | Activity date |
+| `subject` | Synthetic activity subject |
+| `outcome` | Activity outcome |
+
+Generated activity types: `Call`, `Email`, `Meeting`.
+
+Generated activity outcome: `Completed`.
+
+Activities in the implemented dataset are linked to opportunities. The schema does not currently implement account-only activities.
+
+### 3.8 Quota
+
+**Purpose:** Stores quarterly sales targets for representatives.
+
+- Primary key: `quota_id`
+- Foreign key: `rep_id` → `SalesRep.rep_id`
+
+| Field | Description |
+|---|---|
+| `quota_id` | Unique quota identifier |
+| `rep_id` | Associated sales representative |
+| `fiscal_quarter` | Fiscal quarter |
+| `quota_amount` | Quarterly target amount in USD |
+| `currency_code` | Currency code |
+
+The generator creates one quota per representative for each quarter from 2025Q1 through 2026Q4.
+
+Generated quota amount: USD 250,000.00.
+
+There is no territory foreign key in the implemented quota table.
+
+### 3.9 HistoricalBooking
+
+**Purpose:** Stores booked revenue associated with won opportunities.
+
+- Primary key: `booking_id`
+- Foreign keys:
+  - `opportunity_id` → `Opportunity.opportunity_id`
+  - `account_id` → `Account.account_id`
+  - `rep_id` → `SalesRep.rep_id`
+
+| Field | Description |
+|---|---|
+| `booking_id` | Unique booking identifier |
+| `opportunity_id` | Associated won opportunity |
+| `account_id` | Associated account |
+| `rep_id` | Representative associated with the booking |
+| `booking_date` | Booking recognition date |
+| `booking_amount` | Booked amount in USD |
+| `currency_code` | Currency code |
+
+The generator creates a booking for each won opportunity.
+
+The booking amount equals the opportunity amount, and the booking date equals the opportunity's closing date.
+
+There are no non-opportunity adjustment or reversal records in the current implementation.
+
+### 3.10 ForecastSnapshot
+
+**Purpose:** Stores monthly opportunity-level forecast state as of a historical snapshot date.
+
+- Primary key: `forecast_snapshot_id`
+- Foreign keys:
+  - `opportunity_id` → `Opportunity.opportunity_id`
+
+| Field | Description |
+|---|---|
+| `forecast_snapshot_id` | Unique forecast snapshot identifier |
+| `snapshot_date` | Snapshot cutoff date |
+| `opportunity_id` | Associated opportunity |
+| `stage_id` | Stage identifier as of the snapshot date |
+| `amount` | Opportunity amount in USD |
+| `expected_close_date` | Expected close date as of the snapshot |
+| `last_activity_date` | Latest activity date available by the snapshot date |
+| `stale_days` | Days since the last activity, or creation date if no activity exists |
+| `is_stale` | Whether the opportunity is considered stale |
+
+The generator creates monthly month-end snapshots from January 2025 through December 2026, covering 24 snapshot dates and eight quarters.
+
+Snapshot reconstruction follows these rules:
+
+1. Only stage history events dated on or before the snapshot date are considered.
+2. The latest eligible stage event determines the snapshot stage.
+3. Closed Won and Closed Lost opportunities are excluded from open pipeline snapshots.
+4. Only activities dated on or before the snapshot date are considered.
+5. `stale_days` is calculated from the last eligible activity date, or opportunity creation date when no activity exists.
+6. An opportunity is stale when `stale_days >= 30`.
+7. Expected close dates are pushed according to the documented stale-opportunity slippage rule.
+
+The implemented snapshot grain is one row per opportunity per applicable snapshot date. It does not contain representative-level, territory-level, or overall aggregate snapshot rows.
+
+The normal forecast snapshot CSV does not contain a `stage_probability` column. The anomaly dataset adds that field to a deliberately corrupted record for testing.
+
+### 3.11 RepTerritoryAssignment
+
+**Purpose:** Represents effective-dated sales representative territory assignments.
+
+- Primary key: `assignment_id`
+- Foreign keys:
+  - `rep_id` → `SalesRep.rep_id`
+  - `territory_id` → `Territory.territory_id`
+
+| Field | Description |
+|---|---|
+| `assignment_id` | Unique assignment identifier |
+| `rep_id` | Assigned representative |
+| `territory_id` | Assigned territory |
+| `effective_from` | Assignment start date, inclusive |
+| `effective_to` | Assignment end date, exclusive; nullable |
+
+The initial assignment starts on 2025-01-01.
+
+A subset of representatives receives a territory transfer during the generated period. The old assignment ends on the transfer date, and the new assignment starts on that same date.
+
+The effective-dated assignment table provides the many-to-many relationship between representatives and territories over time.
+
+## 4. Relationship and cardinality summary
+
+| Parent | Child | Cardinality | Implemented relationship |
 |---|---|---|---|
-| Territory | Account | 1:N | Account territory is optional |
-| Account | Opportunity | 1:N | Each opportunity requires one account |
-| SalesRep | Opportunity | 1:N | Each opportunity requires one owner |
-| Territory | Opportunity | 1:N | Each opportunity requires one territory |
-| Opportunity | StageHistory | 1:N | Every opportunity should have an initial stage event |
-| Stage | StageHistory (from/to) | 1:N | `from_stage_id` is NULL only for initial event |
-| Account | Activity | 1:N | Required |
-| SalesRep | Activity | 1:N | Required |
-| Opportunity | Activity | 1:N | Activity's opportunity link is optional |
-| SalesRep | Quota | 1:N | Required |
-| Territory | Quota | 1:N | Quota territory is optional |
-| Account | HistoricalBooking | 1:N | Required |
-| SalesRep | HistoricalBooking | 1:N | Required |
-| Territory | HistoricalBooking | 1:N | Required |
-| Opportunity | HistoricalBooking | 1:N | Optional for non-opportunity adjustments |
-| SalesRep | Territory | N:M | Implemented by RepTerritoryAssignment |
-| SalesRep | ForecastSnapshot | 1:N | Snapshot rep dimension optional |
-| Territory | ForecastSnapshot | 1:N | Snapshot territory dimension optional |
-| Opportunity | ForecastSnapshot | 1:N | Snapshot opportunity dimension optional |
+| Territory | Account | 1:N | Each generated account has one territory |
+| Territory | Opportunity | 1:N | Each opportunity has one territory |
+| SalesRep | Opportunity | 1:N | Each opportunity has one owner |
+| Account | Opportunity | 1:N | Each opportunity belongs to one account |
+| Opportunity | StageHistory | 1:N | Each opportunity has ordered stage events |
+| Stage | StageHistory | 1:N | A stage can appear in many transition events |
+| Opportunity | Activity | 1:N | Activities are linked to opportunities |
+| SalesRep | Activity | 1:N | Each activity has one representative |
+| SalesRep | Quota | 1:N | Each representative has quarterly quotas |
+| Opportunity | HistoricalBooking | 1:0..1 | Won opportunities have one booking |
+| Account | HistoricalBooking | 1:N | Each booking references one account |
+| SalesRep | HistoricalBooking | 1:N | Each booking references one representative |
+| Opportunity | ForecastSnapshot | 1:N | Each opportunity can appear in multiple snapshots |
+| SalesRep | RepTerritoryAssignment | 1:N | A representative can have assignment history |
+| Territory | RepTerritoryAssignment | 1:N | A territory can have multiple representative assignments |
 
-## 4. Effective dating and temporal rules
+SalesRep and Territory have a many-to-many relationship over time through `RepTerritoryAssignment`.
 
-1. `RepTerritoryAssignment.effective_from` is inclusive; `effective_to` is exclusive. For a date `d`, an assignment is active when `effective_from <= d` and (`effective_to IS NULL` or `d < effective_to`).
-2. Two assignments for the same rep must not overlap when the project uses a single-primary-territory policy. A territory transfer is represented by ending the old interval and starting a new interval on the transfer date.
-3. Opportunity ownership/territory at a historical point is resolved from the assignment effective on that date. The opportunity's stored `territory_id` is its assigned territory at creation unless a separately recorded reassignment event is introduced.
-4. StageHistory is event time, not merely a current-state field. The latest valid event at or before a cutoff determines the stage at that cutoff.
-5. ForecastSnapshot stores a point-in-time result. Later stage changes, bookings, or territory changes must not alter an existing snapshot.
+## 5. Temporal and lifecycle rules
 
-## 5. Lifecycle states and allowed stage transitions
+### Effective-dated territory assignments
 
-### Opportunity stage graph
+- `effective_from` is inclusive.
+- `effective_to` is exclusive.
+- An assignment is active on date `d` when:
 
-```text
-[Prospecting] -> [Qualification] -> [Proposal] -> [Negotiation]
-      |                 |                |              |
-      +-----------------+----------------+--------------+--> [Closed Lost]
-                                                       |
-                                                       +--> [Closed Won]
-```
+  `effective_from <= d AND (effective_to IS NULL OR d < effective_to)`
 
-More precisely, allowed transitions are:
+- The old territory assignment ends on the transfer date.
+- The new assignment begins on the same date.
+- Opportunity territory is assigned using the representative's territory assignment effective on the opportunity creation date.
 
-- Initial state: NULL → Prospecting.
-- Prospecting → Qualification or Closed Lost.
-- Qualification → Proposal or Closed Lost.
-- Proposal → Negotiation or Closed Lost.
-- Negotiation → Closed Won or Closed Lost.
-- Same-stage events are not stage transitions; record activities or notes instead.
-- Backward transitions, skipping stages, reopening closed deals, and Closed Won ↔ Closed Lost are disallowed in this POC.
+### Opportunity stage lifecycle
 
-`current_stage`, `outcome`, `closed_date`, and current stage probability on Opportunity are derived from StageHistory. They must not be independently randomized.
-
-### Other entity states
-
-- SalesRep: `Active`, `Inactive`.
-- Territory: `Active`, `Inactive`.
-- Account: `Prospect`, `Customer`, `Disqualified`.
-- Opportunity outcome: `Open`, `Won`, `Lost` (derived from stage).
-- Activity status: `Planned`, `Completed`, `Cancelled` if an activity status is needed; activity type and outcome are separate controlled fields.
-- Quota: `Draft`, `Active`, `Superseded` if quota lifecycle is needed. A revised quota is a new version/event, not an overwrite.
-- HistoricalBooking: `Recognized`, `Reversed`; reversal uses a compensating row.
-- ForecastSnapshot: `Final` (immutable once written); reruns create a new snapshot ID/version.
-
-## 6. Text ER diagram
+The configured stage progression is:
 
 ```text
-SalesRep 1 -----< Opportunity >----- 1 Account
-    |                   |                |
-    |                   |                +-----< Activity >----- 1 SalesRep
-    |                   |
-    |                   +-----< StageHistory >----- 1 Stage (to_stage)
-    |                                  |
-    |                                  +---------- 0..1 Stage (from_stage)
+Prospecting
     |
-    +-----< Quota >----- 0..1 Territory
+    v
+Qualification
     |
-    +-----< HistoricalBooking >----- 1 Account
-    |               |               |
-    |               +---------------+----- 1 Territory
+    v
+Proposal
     |
-    +-----< RepTerritoryAssignment >----- 1 Territory
-    |
-    +-----< ForecastSnapshot >----- 0..1 Territory
-                         |
-                         +---------- 0..1 Opportunity
-
-Territory 1 -----< Account (optional account territory)
-Territory 1 -----< Opportunity
-Opportunity 1 ---< Activity (optional activity opportunity)
-Opportunity 1 ---< HistoricalBooking (optional booking opportunity)
-Opportunity 1 ---< ForecastSnapshot (optional snapshot opportunity)
-```
-
-`RepTerritoryAssignment` is the associative entity that resolves the SalesRep–Territory N:M relationship and preserves effective-dated coverage history.
-
-
-## Provenance and lawful use
-
-- All records produced by this project are synthetic and are created solely for proof-of-concept development, testing, and demonstration.
-- No external datasets, customer records, employee records, personal data, or other real-world source data were used to create the project data.
-- The canonical generator is invoked with `python -m src.generate_data --scale starter` or `python -m src.generate_data --scale full`.
-- The fixed generator seed is `20261022`; the selected scale changes dataset volume only and must not change the documented business rules.
-- The generator command and seed must be recorded in the run manifest so each generated dataset can be reproduced and audited.
+    v
+Negotiation
+   / \
+  v   v
+Closed Won   Closed Lost

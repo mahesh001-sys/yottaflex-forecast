@@ -2,7 +2,7 @@ import pandas as pd
 import csv
 import hashlib
 
-from src.generate_data import generate_dataset, STAGE_ID
+from src.generate_data import SCALES, generate_dataset, STAGE_ID
 
 
 def test_booking_rows_reconcile_to_won_opportunities():
@@ -67,3 +67,22 @@ def test_starter_dataset_is_reproducible(tmp_path):
     generate_dataset("starter", out=second_dir, seed=20261022)
 
     assert _csv_checksums_and_rows(first_dir) == _csv_checksums_and_rows(second_dir)
+
+
+def test_starter_and_full_scales_share_the_same_generation_code_path(
+    tmp_path, monkeypatch
+):
+    # Use a small full-scale configuration here to keep unit tests fast. The
+    # real 20,000-opportunity full scale is exercised by the documented CLI run.
+    monkeypatch.setitem(SCALES, "full", dict(SCALES["starter"]))
+
+    starter = generate_dataset("starter", out=tmp_path / "starter", seed=20261022)
+    full = generate_dataset("full", out=tmp_path / "full", seed=20261022)
+
+    assert starter.keys() == full.keys()
+    for table in starter:
+        assert starter[table].columns.tolist() == full[table].columns.tolist()
+        assert len(starter[table]) == len(full[table])
+
+    assert len(starter["opportunity"]) == 200
+    assert len(full["opportunity"]) == 200

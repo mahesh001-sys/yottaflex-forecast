@@ -6,4 +6,10 @@ venv/
 .env
 *.sqlite
 *.db
-data/processed/
+
+data/processed/*
+!data/processed/seed.sql
+
+# Temporary local files
+check_quarters.py
+yottaflex-source.zip

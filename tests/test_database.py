@@ -7,7 +7,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from src.database import LOAD_ORDER, PRIMARY_KEYS
+from src.database import LOAD_ORDER, PRIMARY_KEYS, build_database
+from src.export_json import export_all
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,7 +20,14 @@ JSON_DIR = PROCESSED_DIR / "json"
 
 @pytest.fixture
 def database():
-    assert DB_PATH.exists(), "Run python -m src.database first"
+    # Make the suite self-contained on a clean clone. Generated artifacts are
+    # reproducible from the committed CSV source data and must not be required
+    # to exist before pytest starts.
+    if not DB_PATH.exists():
+        build_database(RAW_DIR, PROCESSED_DIR)
+    if not all((JSON_DIR / f"{table}.json").exists() for table in LOAD_ORDER):
+        export_all(DB_PATH, JSON_DIR)
+
     connection = sqlite3.connect(DB_PATH)
     yield connection
     connection.close()
@@ -139,3 +147,33 @@ def test_database_primary_keys_and_foreign_keys(database):
         ).fetchall()
 
         assert isinstance(foreign_keys, list)
+
+
+
+def test_json_export_round_trip_matches_sqlite_sample_rows(database):
+    for table in LOAD_ORDER:
+        primary_key = PRIMARY_KEYS[table]
+        with (JSON_DIR / f"{table}.json").open(encoding="utf-8") as file:
+            json_rows = json.load(file)
+
+        cursor = database.execute(
+            f'SELECT * FROM "{table}" ORDER BY "{primary_key}" LIMIT 1'
+        )
+        columns = [item[0] for item in cursor.description]
+        sqlite_row = dict(zip(columns, cursor.fetchone()))
+
+        assert json_rows[0] == sqlite_row, table
+
+        with (RAW_DIR / f"{table}.csv").open(
+            encoding="utf-8-sig", newline=""
+        ) as file:
+            csv_rows = csv.DictReader(file)
+            matching_csv_row = next(
+                (
+                    row for row in csv_rows
+                    if row[primary_key] == json_rows[0][primary_key]
+                ),
+                None,
+            )
+
+        assert matching_csv_row is not None, table

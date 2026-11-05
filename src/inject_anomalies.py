@@ -1,3 +1,4 @@
+
 """Copy clean data and inject five labelled anomalies.
 
 Run from the repository root:
@@ -12,6 +13,8 @@ import json
 import shutil
 from datetime import date, timedelta
 from pathlib import Path
+
+from src.manifest import write_manifest
 
 
 RAW_DIR = Path("data/raw")
@@ -50,7 +53,7 @@ def create_anomaly_fixtures(
     raw_dir: Path = RAW_DIR,
     anomaly_dir: Path = ANOMALY_DIR,
 ) -> list[dict[str, str]]:
-    """Copy raw data and inject exactly five anomalies into the copy."""
+    """Copy raw data and inject exactly five anomalies."""
     if not raw_dir.is_dir():
         raise FileNotFoundError(f"Missing clean data directory: {raw_dir}")
 
@@ -93,7 +96,12 @@ def create_anomaly_fixtures(
     used_opportunity_ids: set[str] = set()
     used_snapshot_ids: set[str] = set()
 
-    def add_truth(issue_type: str, table: str, record_id: str, description: str) -> None:
+    def add_truth(
+        issue_type: str,
+        table: str,
+        record_id: str,
+        description: str,
+    ) -> None:
         truth.append({
             "issue_type": issue_type,
             "table": table,
@@ -237,7 +245,9 @@ def create_anomaly_fixtures(
         raise ValueError("No snapshot is available for the future-information anomaly.")
 
     leak_id = leak_row["forecast_snapshot_id"]
-    leak_row["stage_id"] = latest_history_stage(leak_row["opportunity_id"]) or leak_row["stage_id"]
+    leak_row["stage_id"] = (
+        latest_history_stage(leak_row["opportunity_id"]) or leak_row["stage_id"]
+    )
     used_snapshot_ids.add(leak_id)
     add_truth(
         "future_information_leak",
@@ -284,6 +294,9 @@ def create_anomaly_fixtures(
         json.dump(truth, file, indent=2)
         file.write("\n")
 
+    # Rebuild the manifest after all anomaly files have been written.
+    write_manifest(anomaly_dir)
+
     return truth
 
 
@@ -293,6 +306,7 @@ def main() -> int:
     for item in truth:
         print(f"  {item['issue_type']} | {item['table']} | {item['record_id']}")
     print("The source data/raw directory was not modified.")
+    print("Anomaly manifest regenerated successfully.")
     return 0
 
 

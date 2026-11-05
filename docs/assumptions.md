@@ -1,137 +1,439 @@
-# Project Assumptions and Derivation Rules
-
-## 1. Scope and reproducibility
-
-- All records are synthetic. No real customer, employee, territory, opportunity, or transaction data is used.
-- Python 3.11+ is the runtime. The project uses pandas, numpy, pytest, and Python's standard-library `sqlite3`.
-- The fixed random seed is `20261022`. The project has one canonical data generator with `--scale starter|full`; scale changes volume, not business rules.
-- Every module is runnable as `python -m src.<module>`.
-- Generated IDs are deterministic and zero-padded. Canonical formats are: `REP-000001`, `TER-0001`, `ACC-000001`, `OPP-2026-000001`, `STG-<opportunity-id>-001`, `ACT-<opportunity-id>-0001`, `BKG-<opportunity-id>-001`, `QUOTA-<rep-id>-2026Q1`, and `FCST-2026-01-31-001`. Account-level activities without an opportunity use `ACT-<account-id>-0001`; non-opportunity booking adjustments use `BKG-ADJ-000001`.
-- Derived fields are computed from source records. They are not generated independently.
-- State changes are append-only events. Existing history is never overwritten.
-- Anomaly ground truth is stored separately under `data/anomalies/` and is excluded from validation inputs. It may be used only after validation to score anomaly-detection performance.
-
-## 2. Stage probabilities
-
-The configured default probability is a deterministic lookup by stage:
-
-| Stage | Probability |
-|---|---:|
-| Prospecting | 10% |
-| Qualification | 25% |
-| Proposal | 50% |
-| Negotiation | 80% |
-| Closed Won | 100% |
-| Closed Lost | 0% |
-
-Probabilities are proportions internally (`0.10`, `0.25`, `0.50`, `0.80`, `1.00`, `0.00`). They are not sampled per opportunity. The stage probability used in a historical forecast is the probability associated with the stage at the snapshot cutoff date.
-
-## 3. Currency
-
-- The project currency is **USD**.
-- Every monetary amount is represented in USD with two decimal places.
-- `currency_code` must be `USD`.
-- No foreign-exchange conversion is performed. If multi-currency support is added later, it must be an explicit extension with dated exchange-rate source records.
-
-## 4. Time horizon
-
-- The dataset covers eight quarters: **2025Q1 through 2026Q4**, inclusive.
-- Calendar quarter mapping:
-  - Q1: January 1–March 31
-  - Q2: April 1–June 30
-  - Q3: July 1–September 30
-  - Q4: October 1–December 31
-- Dates and timestamps are synthetic and bounded by this horizon unless a test intentionally creates an out-of-range invalid record.
-- Quotas are defined by rep and fiscal quarter. Forecast snapshots use explicit snapshot dates and forecast periods within the horizon.
-
-## 5. Won and lost outcomes
-
-- Outcomes are determined only by StageHistory and the allowed transition graph.
-- An opportunity becomes **Won** only when its stage transitions to `Closed Won`; it becomes **Lost** only when its stage transitions to `Closed Lost`.
-- A Won/Lost opportunity receives a `closed_date` derived from the timestamp/date of the terminal stage event.
-- An open opportunity has outcome `Open` and a NULL `closed_date`.
-- No independent random outcome label is assigned. The synthetic generator may use deterministic scenario rules to decide which valid transition event occurs, but the stored outcome must always be reproducible from the event history.
-- A positive HistoricalBooking may be recognized only for a Won opportunity. A Lost opportunity cannot produce positive booking revenue.
-- Account conversion to `Customer` is derived from qualifying Won booking/outcome evidence; it is not randomly assigned.
-
-## 6. Slippage
-
-- Slippage means an opportunity's expected close date moves later than its previous expected close date or passes its expected close date without closing.
-- Every close-date change is represented as an append-only opportunity event (or a dedicated append-only date-change event table if implemented); do not overwrite the original expected close date.
-- For a simple derived metric, `slipped_days = max(0, actual_or_as_of_date - expected_close_date)` for an open deal that remains open after its expected close date. For explicit date revisions, calculate the shift from the prior expected close date and retain each revision.
-- A deal closed after its expected close date is late by the positive day difference between closed_date and expected_close_date.
-- A deal that closes on or before its expected close date has zero close-date slippage.
-- Do not infer slippage from random labels.
-
-## 7. Stale deals
-
-- An opportunity is stale when it remains open and has had no qualifying sales Activity for more than 30 calendar days as of the evaluation/snapshot date.
-- Qualifying activities are `Call`, `Email`, `Meeting`, and `Demo` with `activity_status = Completed`; `Task` does not reset the engagement clock unless explicitly enabled in a later rule version.
-- `last_activity_at` is derived as the maximum qualifying Activity timestamp for that opportunity (or its account, if account-level activities are explicitly included by the chosen implementation rule).
-- `stale_days = as_of_date - last_activity_date`. If there is no qualifying activity, use opportunity `created_date` as the baseline.
-- Stale status is derived at query/snapshot time and is not an independently generated or manually assigned field.
-
-## 8. Seasonality
-
-- Seasonality affects synthetic source demand/booking patterns, not labels or outcomes directly.
-- Use a documented deterministic quarterly index applied to a base volume/amount before records are created. Suggested initial index (multipliers): Q1 `0.90`, Q2 `0.95`, Q3 `1.00`, Q4 `1.15`.
-- The index is a configurable project assumption, not a claim about real-world sales. It must be fixed for a generator version and recorded in the manifest.
-- Apply seasonality to source opportunity creation volume and/or source deal amount according to a documented generator choice. Do not apply it a second time to derived weighted pipeline, bookings, or forecast outputs.
-- Won/lost outcomes remain determined by lifecycle rules; seasonality must not directly flip an opportunity's outcome.
-
-## 9. Forecast derivation
-
-- Opportunity weighted amount at a snapshot is `amount × stage_probability_as_of_snapshot`.
-- Rep/territory/overall pipeline forecasts are sums of eligible opportunity-level weighted amounts within the relevant dimensions and forecast period.
-- Closed Won opportunities have 100% stage probability; Closed Lost opportunities have 0%.
-- Actuals are derived from HistoricalBooking facts within the forecast period, not from generated forecast values.
-- A snapshot is immutable. Re-running a forecast creates a new snapshot ID/version rather than editing a previous snapshot.
-
-## 10. Ambiguities resolved for this schema
-
-- `Stage` is a controlled reference table. `StageHistory` stores transitions; `Opportunity.current_stage` and `outcome` are cached/derived values only.
-- `RepTerritoryAssignment` is the effective-dated N:M bridge. Intervals are start-inclusive/end-exclusive.
-- Opportunity territory is the territory assigned at opportunity creation unless a separate append-only reassignment event is added in a future schema revision.
-- `HistoricalBooking` may optionally link to an Opportunity to support non-opportunity adjustments, but ordinary new-business/expansion/renewal bookings should link to the Won opportunity that generated them.
-- ForecastSnapshot permits nullable dimension keys to support opportunity-, rep-, territory-, and overall-level snapshots. The implementation must enforce a consistent grain for each `forecast_type`.
-- The exact starter/full row counts are intentionally not fixed in these docs; they belong in the generator specification/manifest so they can evolve without changing business semantics.
+**# Project Assumptions and Derivation Rules**
 
 
-## 11. Provenance and lawful use
 
-- All project data is synthetic. No external datasets or personal data were used to generate or populate it.
-- The single canonical generator is run as `python -m src.generate_data --scale starter` or `python -m src.generate_data --scale full`.
-- The fixed seed is `20261022` for both scales. Scale controls volume only; it does not change business logic or outcome rules.
-- Each generation run must record the exact command, scale, and seed in its manifest.
-- The project is intended for development, testing, and demonstration with synthetic data only; real customer, employee, or prospect data must not be introduced into generated datasets.
+**## 1. Scope and reproducibility**
 
 
-## 12. Forecast scenarios
 
-- Baseline expected revenue is `amount × stage_probability`, using the stage recorded for each opportunity in its forecast snapshot.
-- The pessimistic scenario applies a `0.75` multiplier to baseline stage probability, then applies a separate `0.85` multiplier to expected revenue. Adjusted probability is bounded between 0 and 1.
-- The optimistic scenario applies a `1.20` multiplier to baseline stage probability, capped at `1.00`; expected revenue uses the adjusted probability.
-- Scenarios retain the same snapshot rows, amounts, dates, stages, and territories as the baseline forecast. They are deterministic what-if adjustments, not statistical confidence intervals or calibrated probability estimates.
-- Scenario summaries aggregate scenario detail by scenario, calendar quarter, territory, and stage. Each scenario's summary total must reconcile to its detail total.
+**- All records are synthetic. No real customer, employee, territory, opportunity, or transaction data is used.**
+
+**- Python 3.11+ is the documented runtime.**
+
+**- The project uses pandas, numpy, pytest, and Python's standard-library sqlite3.**
+
+**- The canonical generator is `src/generate\_data.py`.**
+
+**- The fixed default seed is `20261022`.**
+
+**- Supported scales:**
+
+&#x20; **- Starter: 4 territories, 20 sales representatives, 20 accounts, 200 opportunities.**
+
+&#x20; **- Full: 4 territories, 2,000 sales representatives, 2,000 accounts, 20,000 opportunities.**
+
+**- Scale changes dataset volume, not the configured business rules.**
+
+**- The Python function `generate\_dataset(scale, out, seed)` accepts a seed parameter. The command-line interface uses the fixed default seed.**
+
+**- Run the generator from the repository root:**
+
+&#x20; **- `python -m src.generate\_data --scale starter --out data/raw`**
+
+&#x20; **- `python -m src.generate\_data --scale full --out data/raw`**
+
+**- Generated IDs are deterministic for a given seed and generation configuration.**
+
+**- Derived values are calculated from source records rather than independently sampled.**
+
+**- Stage changes are stored as StageHistory events.**
+
+**- Anomaly ground truth is stored separately under `data/anomalies/`.**
 
 
-## 13. Historical snapshot revenue accuracy
 
-`python -m src.evaluate` evaluates baseline and adjusted expected revenue for
-opportunities that appear in each forecast snapshot and later have a valid
-closed outcome and close date. It joins booking records by opportunity and sums
-multiple booking rows before calculating actual booked revenue. Closed
-opportunities with no booking rows are treated as zero booked revenue.
+**## 2. Stage probabilities**
 
-The evaluation reports expected revenue, actual booked revenue, signed error
-(expected minus actual), absolute error, WAPE, and signed bias. Positive error
-means over-forecast; negative error means under-forecast. WAPE and bias are
-percentages of total booked revenue and are undefined when that total is zero.
-Results are grouped by snapshot-to-close horizon and by territory, product,
-and rep. Horizon buckets are 0–30, 31–60, 61–90, 91–180, and 181+ days.
 
-This is a historical snapshot evaluation, not a live forecast or a causal
-assessment of forecast adjustments. It does not score opportunities missing
-from a snapshot, open opportunities without a valid close date, or unrecorded
-bookings. Booking amounts are summed as provided; this evaluation does not
-convert currencies.
+
+**The configured default probability is a deterministic lookup by stage:**
+
+
+
+**| Stage | Probability |**
+
+**|---|---:|**
+
+**| Prospecting | 10% |**
+
+**| Qualification | 25% |**
+
+**| Proposal | 50% |**
+
+**| Negotiation | 80% |**
+
+**| Closed Won | 100% |**
+
+**| Closed Lost | 0% |**
+
+
+
+**Probabilities are proportions internally: `0.10`, `0.25`, `0.50`, `0.80`, `1.00`, and `0.00`.**
+
+
+
+**They are stage-level defaults, not independently sampled opportunity probabilities. Forecast calculations obtain the probability associated with the opportunity's stage at the snapshot date.**
+
+
+
+**The normal ForecastSnapshot CSV stores the stage ID, not a separate stage\_probability column. The anomaly dataset may add a deliberately corrupted stage\_probability field for anomaly testing.**
+
+
+
+**## 3. Currency**
+
+
+
+**- The project currency is USD.**
+
+**- Monetary values are represented in USD with two decimal places.**
+
+**- Generated currency codes are `USD`.**
+
+**- No foreign-exchange conversion is performed.**
+
+**- Mixed-currency records are invalid for the standard dataset and are deliberately introduced in the anomaly dataset.**
+
+
+
+**## 4. Time horizon and seasonality**
+
+
+
+**- The source-data horizon is January 1, 2025 through December 31, 2026.**
+
+**- The dataset covers eight calendar quarters: 2025Q1 through 2026Q4.**
+
+**- Calendar quarter mapping:**
+
+&#x20; **- Q1: January 1–March 31**
+
+&#x20; **- Q2: April 1–June 30**
+
+&#x20; **- Q3: July 1–September 30**
+
+&#x20; **- Q4: October 1–December 31**
+
+**- The generator uses the following quarterly index:**
+
+
+
+**| Quarter | Multiplier |**
+
+**|---|---:|**
+
+**| Q1 | 0.90 |**
+
+**| Q2 | 0.95 |**
+
+**| Q3 | 1.00 |**
+
+**| Q4 | 1.15 |**
+
+
+
+**- The index weights opportunity creation dates and adjusts generated opportunity amounts.**
+
+**- These multipliers are synthetic project assumptions, not claims about real-world sales patterns.**
+
+**- Seasonality is not applied again to derived weighted pipeline or booking totals.**
+
+
+
+**## 5. Sales representatives and territory assignments**
+
+
+
+**- Four synthetic territories are generated.**
+
+**- Each representative has an initial effective-dated territory assignment.**
+
+**- Approximately 20% of representatives are selected for a synthetic territory transfer.**
+
+**- Assignment intervals use start-inclusive and end-exclusive dates.**
+
+**- An opportunity receives the territory associated with its owner's assignment at opportunity creation.**
+
+**- Opportunity territory is not automatically changed by later representative transfers.**
+
+**- RepTerritoryAssignment is the implemented bridge between SalesRep and Territory.**
+
+
+
+**## 6. Opportunity lifecycle and outcomes**
+
+
+
+**The configured stage order is:**
+
+
+
+**1. Prospecting**
+
+**2. Qualification**
+
+**3. Proposal**
+
+**4. Negotiation**
+
+**5. Closed Won or Closed Lost**
+
+
+
+**Stage progression is generated using opportunity age and a deterministic synthetic representative activity tier.**
+
+
+
+**The generator calculates:**
+
+
+
+**- `age\_days`: days from opportunity creation to the dataset as-of date.**
+
+**- `effective\_age`: opportunity age adjusted by the synthetic representative activity tier.**
+
+**- `touch\_score`: a deterministic score based on generated activity-date count and representative activity tier.**
+
+
+
+**The generated progression rules are:**
+
+
+
+**- Effective age below 45 days: Prospecting.**
+
+**- Effective age from 45 to below 110 days: Qualification is reached.**
+
+**- Effective age from 110 to below 190 days: Proposal is reached.**
+
+**- Effective age from 190 to below 285 days: Negotiation is reached.**
+
+**- Effective age of 285 days or more: a terminal stage is generated.**
+
+**- A terminal opportunity is Won when its touch score is at least 8.0 and effective age is at least 330 days.**
+
+**- Otherwise, a terminal opportunity is Lost.**
+
+
+
+**These are synthetic scenario rules, not trained or calibrated sales conversion probabilities.**
+
+
+
+**StageHistory stores the generated lifecycle events. The Opportunity table's `current\_stage` and `outcome` represent the final generated state.**
+
+
+
+**- Won opportunities have outcome `Won`.**
+
+**- Lost opportunities have outcome `Lost`.**
+
+**- Non-terminal opportunities have outcome `Open`.**
+
+**- Closed opportunities receive a `closed\_date` derived from the final stage event.**
+
+**- Open opportunities have a NULL `closed\_date`.**
+
+
+
+**## 7. Activities**
+
+
+
+**- Activities are generated for opportunities.**
+
+**- Each opportunity receives between two and eight generated activity-date candidates; duplicate dates are removed.**
+
+**- Generated activity types are Call, Email, and Meeting.**
+
+**- Generated activity outcomes are `Completed`.**
+
+**- Activity records link to Opportunity and SalesRep.**
+
+**- Account-level-only activities are not generated in the current implementation.**
+
+**- Activity IDs use the format `ACT-<opportunity-id>-NNN`.**
+
+
+
+**The synthetic touch score uses the number of generated activity dates and the representative activity tier. It does not independently classify each activity outcome to decide the opportunity outcome.**
+
+
+
+**## 8. Stale opportunities and snapshot slippage**
+
+
+
+**- Forecast snapshots are generated at monthly month-end dates from January 31, 2025 through December 31, 2026.**
+
+**- Snapshot state is reconstructed using StageHistory events on or before the snapshot date.**
+
+**- Activity dates after the snapshot cutoff are not used to calculate the snapshot's last activity date.**
+
+**- `stale\_days` is calculated from the last activity date as of the snapshot, or from opportunity creation when no activity is available.**
+
+**- `is\_stale` is true when `stale\_days >= 30`.**
+
+**- The normal ForecastSnapshot table stores `last\_activity\_date`, `stale\_days`, and `is\_stale`.**
+
+
+
+**For forecast slippage:**
+
+
+
+**- The snapshot generator calculates a synthetic push count from stale days.**
+
+**- For each complete 30-day period beyond the initial 30-day threshold, it pushes the expected close date by another 30 days.**
+
+**- The snapshot's expected close date is the original opportunity expected close date plus the calculated push days.**
+
+**- This is a derived snapshot value. The current implementation does not store a separate append-only close-date revision event table.**
+
+
+
+**## 9. Quotas and historical bookings**
+
+
+
+**- Quotas are generated for each sales representative and each quarter from 2025Q1 through 2026Q4.**
+
+**- The generated quota amount is USD 250,000.00 per representative per quarter.**
+
+**- HistoricalBooking records are generated for Won opportunities only.**
+
+**- A booking links to its opportunity, account, and representative.**
+
+**- Booking amount is derived from the Won opportunity amount.**
+
+**- Booking date is derived from the opportunity close date.**
+
+**- Lost and Open opportunities do not generate positive historical booking records.**
+
+**- Booking IDs use the format `BOOK-<opportunity-id>`.**
+
+
+
+**## 10. Forecast derivation**
+
+
+
+**- ForecastSnapshot is an opportunity-level snapshot table.**
+
+**- Each row represents one eligible opportunity at one snapshot date.**
+
+**- The snapshot stores the opportunity ID, stage ID, amount, expected close date, last activity date, stale days, and stale flag.**
+
+**- Snapshot stage is reconstructed from the latest StageHistory event on or before the snapshot date.**
+
+**- Closed Won and Closed Lost opportunities are excluded from the open pipeline snapshots.**
+
+**- Weighted expected revenue is calculated as:**
+
+
+
+&#x20; **`weighted\_amount = amount × stage\_probability`**
+
+
+
+**- Stage probability is looked up from the Stage reference table using the stage recorded in the snapshot.**
+
+**- Rep, territory, and overall pipeline totals are derived by aggregating opportunity-level records and their related dimensions. They are not separate snapshot grains in the generated ForecastSnapshot CSV.**
+
+**- Historical actuals are derived from HistoricalBooking records, not from forecast values.**
+
+**- Snapshot reconstruction must not use future StageHistory or Activity events.**
+
+
+
+**## 11. Forecast scenarios**
+
+
+
+**- Baseline expected revenue is `amount × stage\_probability`.**
+
+**- The pessimistic scenario applies a `0.75` multiplier to baseline stage probability and then a separate `0.85` multiplier to expected revenue.**
+
+**- Adjusted probability is bounded between 0 and 1.**
+
+**- The optimistic scenario applies a `1.20` multiplier to baseline stage probability, capped at `1.00`.**
+
+**- Scenario rows retain the same underlying snapshot opportunity, amount, date, stage, and territory information.**
+
+**- Scenario summaries aggregate scenario detail by scenario, calendar quarter, territory, and stage.**
+
+**- Scenario outputs are deterministic what-if adjustments. They are not statistical confidence intervals or calibrated probability estimates.**
+
+
+
+**## 12. Validation and anomaly ground truth**
+
+
+
+**- The clean generated dataset is validated independently from the deliberately corrupted anomaly dataset.**
+
+**- Standard validation covers primary keys, foreign keys, required values, enumerations, date rules, arithmetic, and business constraints.**
+
+**- The anomaly dataset contains five labelled issue types:**
+
+&#x20; **- Close date before creation.**
+
+&#x20; **- Mixed currency.**
+
+&#x20; **- Stage probability mismatch.**
+
+&#x20; **- Future information leakage in a historical snapshot.**
+
+&#x20; **- Duplicate opportunity in a snapshot.**
+
+**- Ground-truth labels are stored separately from the source tables.**
+
+**- Ground truth is used to score anomaly detection after validation, not as an input to the detection rules.**
+
+**- The anomaly-only `stage\_probability` field is not part of the normal ForecastSnapshot CSV schema.**
+
+
+
+**## 13. Historical snapshot revenue evaluation**
+
+
+
+**The evaluation module compares expected revenue from historical opportunity snapshots with later booked revenue.**
+
+
+
+**- It evaluates opportunities appearing in a snapshot that later have a valid closed outcome and close date.**
+
+**- Booking records are joined by opportunity.**
+
+**- Multiple booking records for one opportunity are summed before actual booked revenue is calculated.**
+
+**- Closed opportunities with no booking records are treated as zero booked revenue.**
+
+**- Reported measures include expected revenue, actual booked revenue, signed error, absolute error, WAPE, and signed bias.**
+
+**- Positive signed error means over-forecast; negative signed error means under-forecast.**
+
+**- Results are grouped by snapshot-to-close horizon and dimensions such as territory, product, and representative.**
+
+**- Horizon buckets are 0–30, 31–60, 61–90, 91–180, and 181+ days.**
+
+**- This is a historical snapshot evaluation, not a live forecast or causal assessment.**
+
+**- It does not score opportunities missing from a snapshot, open opportunities without a valid close date, or unrecorded bookings.**
+
+**- No currency conversion is performed.**
+
+
+
+**## 14. Provenance and lawful use**
+
+
+
+**- All project data is synthetic.**
+
+**- No external datasets or personal data are used to generate or populate the datasets.**
+
+**- The project is intended for development, testing, and demonstration with synthetic data only.**
+
+**- Real customer, employee, or prospect data must not be introduced into generated datasets.**
