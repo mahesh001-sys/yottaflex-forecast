@@ -254,10 +254,13 @@ def _make_opportunities(
             })
 
         for seq, stage_name in enumerate(path, start=1):
-            event_day = min(
-                max(0, int(age_days * seq / max(1, len(path)))),
-                age_days,
-            )
+            if seq == 1:
+                event_day = 0
+            else:
+                event_day = min(
+                    max(0, int(age_days * seq / max(1, len(path)))),
+                    age_days,
+                )
             changed_at = created + pd.Timedelta(days=event_day)
             history.append({
                 "stage_history_id": f"STG-{opportunity_id}-{seq:03d}",
@@ -339,7 +342,7 @@ def _make_snapshots(
     activity: pd.DataFrame,
 ) -> pd.DataFrame:
     """Reconstruct each snapshot from events on/before the fixed date only."""
-    dates = pd.date_range("2026-01-31", "2026-12-31", freq="M")
+    dates = pd.date_range("2025-01-31", "2026-12-31", freq="M")
     history = stage_history.copy()
     history["event_date"] = (
         pd.to_datetime(history["changed_at"], utc=True)
