@@ -1,0 +1,4 @@
+anomaly_id,fixture_file,table_name,record_key,anomaly_type,field_name,expected_value,injected_value
+ANOM-001,duplicate_opportunity_id.csv,opportunity,OPP-2026-000001,duplicate_primary_key,opportunity_id,OPP-2026-000001,OPP-2026-000001
+ANOM-002,invalid_currency.csv,opportunity,OPP-2026-000001,invalid_currency,currency_code,USD,EUR
+ANOM-003,out_of_range_created_date.csv,opportunity,OPP-2026-000001,out_of_range_date,created_date,2026-08-08,2027-01-01
