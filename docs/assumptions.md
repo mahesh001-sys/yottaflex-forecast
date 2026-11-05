@@ -113,3 +113,25 @@ Probabilities are proportions internally (`0.10`, `0.25`, `0.50`, `0.80`, `1.00`
 - The optimistic scenario applies a `1.20` multiplier to baseline stage probability, capped at `1.00`; expected revenue uses the adjusted probability.
 - Scenarios retain the same snapshot rows, amounts, dates, stages, and territories as the baseline forecast. They are deterministic what-if adjustments, not statistical confidence intervals or calibrated probability estimates.
 - Scenario summaries aggregate scenario detail by scenario, calendar quarter, territory, and stage. Each scenario's summary total must reconcile to its detail total.
+
+
+## 13. Historical snapshot revenue accuracy
+
+`python -m src.evaluate` evaluates baseline and adjusted expected revenue for
+opportunities that appear in each forecast snapshot and later have a valid
+closed outcome and close date. It joins booking records by opportunity and sums
+multiple booking rows before calculating actual booked revenue. Closed
+opportunities with no booking rows are treated as zero booked revenue.
+
+The evaluation reports expected revenue, actual booked revenue, signed error
+(expected minus actual), absolute error, WAPE, and signed bias. Positive error
+means over-forecast; negative error means under-forecast. WAPE and bias are
+percentages of total booked revenue and are undefined when that total is zero.
+Results are grouped by snapshot-to-close horizon and by territory, product,
+and rep. Horizon buckets are 0–30, 31–60, 61–90, 91–180, and 181+ days.
+
+This is a historical snapshot evaluation, not a live forecast or a causal
+assessment of forecast adjustments. It does not score opportunities missing
+from a snapshot, open opportunities without a valid close date, or unrecorded
+bookings. Booking amounts are summed as provided; this evaluation does not
+convert currencies.
