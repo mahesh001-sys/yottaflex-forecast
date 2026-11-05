@@ -219,7 +219,7 @@ The project performs standard validation checks and separate custom anomaly dete
 
 ### Standard Validation Checks
 
-The validator runs 32 standard checks.
+The validator runs 37 standard checks.
 
 | Category | Number of checks |
 |---|---:|
@@ -259,9 +259,9 @@ python -m src.validate --data-dir data/raw
 Expected clean-dataset result:
 
 - 11 primary-key checks passed.
-- 15 foreign-key checks passed.
+- 20 foreign-key checks passed.
 - 6 business-rule checks passed.
-- **32 total standard checks passed, 0 failed.**
+- **37 total standard checks passed, 0 failed.**
 - Zero custom anomaly issues.
 
 ### Historical Forecast Evaluation
@@ -313,7 +313,7 @@ The anomaly validation command intentionally returns exit code `1` when it finds
 
 The clean-data validation command should return exit code `0`.
 
-Custom anomaly detections are reported separately from the 32 standard validation checks.
+Custom anomaly detections are reported separately from the 37 standard validation checks.
 
 ## 9. Project Structure
 
@@ -439,7 +439,7 @@ python -m src.validate --data-dir data/raw
 
 The clean-data validation should report:
 
-- 32 passed standard checks.
+- 37 passed standard checks.
 - Zero failed standard checks.
 - Zero custom anomaly issues.
 - Successful exit status.
@@ -517,9 +517,9 @@ The verified full-size run completed with:
 | Scenario summary records | 384 rows |
 | Historical accuracy results | 18,778 rows |
 | Primary-key checks | 11 passed |
-| Foreign-key checks | 15 passed |
+| Foreign-key checks | 20 passed |
 | Business-rule checks | 6 passed |
-| Standard validation checks | 32 passed, 0 failed |
+| Standard validation checks | 37 passed, 0 failed |
 | Clean dataset anomaly issues | 0 |
 | Injected anomalies detected | 5/5 |
 | Ground-truth recall | 100% |
@@ -545,9 +545,9 @@ The following screenshots provide terminal evidence from the verified runs.
 
 ### 12.2 Clean Dataset Validation
 
-All **32 standard validation checks passed**, with zero failed checks and zero custom anomaly issues.
+All **37 standard validation checks passed**, with zero failed checks and zero custom anomaly issues.
 
-![Clean dataset validation — 32 passed, 0 failed](docs/screenshots/clean-validation.png)
+![Clean dataset validation — 37 passed, 0 failed](docs/screenshots/clean-validation.png)
 
 ### 12.3 Anomaly Detection
 
