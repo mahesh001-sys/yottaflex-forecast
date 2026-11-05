@@ -164,7 +164,7 @@ def run() -> None:
             f"{forecast_path} does not exist. Run `python -m src.forecast` first."
         )
 
-    forecast_detail = pd.read_csv(forecast_path)
+    forecast_detail = pd.read_csv(forecast_path, low_memory=False)
     opportunities = pd.read_csv(opportunities_path)
 
     results = evaluate_forecasts(forecast_detail, opportunities)
