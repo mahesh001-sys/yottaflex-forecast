@@ -1,9 +1,20 @@
 # YottaFlex Forecast — Sales Forecasting Proof of Concept
 
-A reproducible Python proof of concept (POC) for synthetic sales-pipeline management, weighted revenue forecasting, scenario analysis, historical forecast evaluation, and data-quality validation.
+**YottaFlex Forecast** is a reproducible Python-based Sales Forecasting Proof of Concept (POC) that demonstrates synthetic sales-pipeline management, weighted revenue forecasting, what-if scenario analysis, historical forecast evaluation, and automated data-quality validation.
 
-**Important: All records in this project are synthetic.** Names, companies, opportunities, activities, amounts, bookings, and territories are generated examples. They do not represent real customers, employees, or actual YottaFlex sales performance.
+Built using Python, Pandas, NumPy, SQLite, and Streamlit, the project includes deterministic synthetic data generation, baseline and adjusted forecasting methods, three forecasting scenarios, historical accuracy metrics, anomaly detection, and automated testing.
 
+**Project Highlights**
+- 300,862 synthetic records across 11 source tables.
+- Baseline and adjusted weighted revenue forecasting.
+- Pessimistic, baseline, and optimistic scenario analysis.
+- Historical evaluation using Brier score, WAPE, and forecast bias.
+- 37 standard data-validation checks.
+- Five deliberately injected anomalies, all detected in the verified run.
+- SQLite database, JSON exports, and an interactive Streamlit dashboard.
+- 51 automated tests passed.
+
+**Important:** All records in this project are synthetic. Names, companies, opportunities, activities, amounts, bookings, and territories are generated examples. They do not represent real customers, employees, or actual YottaFlex sales performance.
 ---
 
 ## 1. What Is a Proof of Concept?
