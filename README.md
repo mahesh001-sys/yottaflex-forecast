@@ -604,17 +604,12 @@ All five deliberately injected anomalies were detected, achieving **100% ground-
 
 ![Anomaly detection — 5 out of 5 detected](docs/screenshots/anomaly-detection.png)
 
-### Evidence Summary
+## Project Results at a Glance
 
-| Test | Verified result |
-|---|---:|
-| Automated tests | 51 passed |
-| Primary-key validation | 11/11 passed |
-| Foreign-key validation | 20/20 passed |
-| Business-rule validation | 6/6 passed |
-| Clean dataset custom anomaly issues | 0 |
-| Anomaly detection | 5/5 detected |
-| Full-scale reproducibility | SHA-256 matched across 11 tables |
+The following report provides a visual summary of the full-scale dataset, forecasting methods, scenario analysis, historical evaluation, anomaly detection, and verification results.
+
+![YottaFlex Forecast Analysis Report](docs/screenshots/readme-analysis-report.png)
+
 
 ## 13. What Is Not Built
 
