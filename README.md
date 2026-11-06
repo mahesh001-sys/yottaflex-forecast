@@ -14,7 +14,8 @@ Built using Python, Pandas, NumPy, SQLite, and Streamlit, the project includes d
 - SQLite database, JSON exports, and an interactive Streamlit dashboard.
 - 51 automated tests passed.
 
-**Important:** All records in this project are synthetic. Names, companies, opportunities, activities, amounts, bookings, and territories are generated examples. They do not represent real customers, employees, or actual YottaFlex sales performance.
+Important: All records in this project are synthetic. Names, companies, opportunities, activities, amounts, bookings, and territories are generated examples. They do not represent real customers, employees, or actual YottaFlex sales performance
+
 ---
 
 ## 1. What Is a Proof of Concept?
