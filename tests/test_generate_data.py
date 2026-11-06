@@ -82,6 +82,53 @@ def test_foreign_keys_and_dates(tmp_path):
     ).all()
 
 
+def test_closed_opportunities_have_stage_specific_conversion_rates(tmp_path):
+    data = generate_dataset("starter", tmp_path / "stage_rates", seed=SEED)
+
+    opportunities = data["opportunity"]
+    history = data["stage_history"]
+
+    open_stage_ids = [
+        "STAGE-001",
+        "STAGE-002",
+        "STAGE-003",
+        "STAGE-004",
+    ]
+
+    reached = history[
+        history["to_stage_id"].isin(open_stage_ids)
+    ].merge(
+        opportunities[["opportunity_id", "outcome"]],
+        on="opportunity_id",
+        how="inner",
+    )
+
+    reached = reached[
+        reached["outcome"].isin(["Won", "Lost"])
+    ]
+
+    stage_summary = (
+        reached.groupby("to_stage_id")["outcome"]
+        .agg(
+            opportunities="count",
+            wins=lambda outcomes: outcomes.eq("Won").sum(),
+            win_rate=lambda outcomes: outcomes.eq("Won").mean(),
+        )
+        .reindex(open_stage_ids)
+    )
+
+    # All four open stages must have closed opportunities represented.
+    assert stage_summary["opportunities"].notna().all()
+    assert (stage_summary["opportunities"] > 0).all()
+
+    # Conversion rates must not be identical at every stage.
+    assert stage_summary["win_rate"].nunique() > 1
+
+    # Later stages should not have a lower historical win rate.
+    rates = stage_summary["win_rate"].tolist()
+    assert rates == sorted(rates)
+
+
 def test_same_seed_same_output(tmp_path):
     first = generate_dataset(
         "starter", tmp_path / "first", seed=SEED

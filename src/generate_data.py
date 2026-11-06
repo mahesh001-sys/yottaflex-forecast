@@ -1,3 +1,4 @@
+
 """Deterministic synthetic master and opportunity data generator.
 
 Run from the repository root:
@@ -224,21 +225,52 @@ def _make_opportunities(
 
         if effective_age < 45:
             path = ["Prospecting"]
+
         elif effective_age < 110:
             path = ["Prospecting", "Qualification"]
+
         elif effective_age < 190:
             path = ["Prospecting", "Qualification", "Proposal"]
+
         elif effective_age < 285:
-            path = ["Prospecting", "Qualification", "Proposal", "Negotiation"]
-        else:
-            terminal = (
-                "Closed Won"
-                if touch_score >= 8.0 and effective_age >= 330
-                else "Closed Lost"
-            )
             path = [
-                "Prospecting", "Qualification", "Proposal", "Negotiation", terminal
+                "Prospecting",
+                "Qualification",
+                "Proposal",
+                "Negotiation",
             ]
+
+        else:
+            if touch_score >= 8.0 and effective_age >= 330:
+                # Successful opportunities progress through every open stage.
+                path = [
+                    "Prospecting",
+                    "Qualification",
+                    "Proposal",
+                    "Negotiation",
+                    "Closed Won",
+                ]
+
+            else:
+                # Lost opportunities can exit at different stages.
+                if touch_score < 3.5:
+                    last_stage = "Prospecting"
+                elif touch_score < 5.5:
+                    last_stage = "Qualification"
+                elif touch_score < 7.5:
+                    last_stage = "Proposal"
+                else:
+                    last_stage = "Negotiation"
+
+                open_stages = [
+                    "Prospecting",
+                    "Qualification",
+                    "Proposal",
+                    "Negotiation",
+                ]
+
+                path = open_stages[:open_stages.index(last_stage) + 1]
+                path.append("Closed Lost")
 
         for j, day in enumerate(activity_days, start=1):
             kind = ("Call", "Email", "Meeting")[(i + j) % 3]
@@ -321,6 +353,10 @@ def _make_opportunities(
 
     opportunities = pd.DataFrame(rows)
     stage_history = pd.DataFrame(history)
+    # Preserve the first event's missing previous stage as Python None.
+    # Pandas otherwise converts None to NaN when constructing the DataFrame.
+    stage_history["from_stage_id"] = stage_history["from_stage_id"].astype(object)
+    stage_history.loc[stage_history["from_stage_id"].isna(), "from_stage_id"] = None
     activity = pd.DataFrame(activities)
 
     won_accounts = set(
@@ -367,7 +403,7 @@ def _make_snapshots(
     activity: pd.DataFrame,
 ) -> pd.DataFrame:
     """Reconstruct each snapshot from events on/before the fixed date only."""
-    dates = pd.date_range("2025-01-31", "2026-12-31", freq="M")
+    dates = pd.date_range("2025-01-31", "2026-12-31", freq="ME")
     history = stage_history.copy()
     history["event_date"] = (
         pd.to_datetime(history["changed_at"], utc=True)

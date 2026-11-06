@@ -17,21 +17,15 @@ PROCESSED_DIR = ROOT / "data" / "processed"
 DB_PATH = PROCESSED_DIR / "yottaflex.db"
 JSON_DIR = PROCESSED_DIR / "json"
 
-
-@pytest.fixture
+@pytest.fixture(scope="module")
 def database():
-    # Make the suite self-contained on a clean clone. Generated artifacts are
-    # reproducible from the committed CSV source data and must not be required
-    # to exist before pytest starts.
-    if not DB_PATH.exists():
-        build_database(RAW_DIR, PROCESSED_DIR)
-    if not all((JSON_DIR / f"{table}.json").exists() for table in LOAD_ORDER):
-        export_all(DB_PATH, JSON_DIR)
+    # Always rebuild from current source CSV files.
+    build_database(RAW_DIR, PROCESSED_DIR)
+    export_all(DB_PATH, JSON_DIR)
 
     connection = sqlite3.connect(DB_PATH)
     yield connection
     connection.close()
-
 
 def test_csv_sqlite_json_row_counts_match(database):
     for table in LOAD_ORDER:

@@ -31,10 +31,10 @@
       "sha256": "dfdb54c9e591b72f2854341ddba279d42a38b0792a880c117c775d47fe78a4bf"
     },
     {
-      "file_size_bytes": 2924706,
+      "file_size_bytes": 2904705,
       "filename": "opportunity.csv",
       "row_count": 20000,
-      "sha256": "1039062cfb040bfac1e650ad9950e116c35f1bae41014cbdbde64981c953e5ff"
+      "sha256": "ac6bd51422cf794d515b99d382f7a8e7e5343a7cca36f863375ac8a84e8368ac"
     },
     {
       "file_size_bytes": 896058,

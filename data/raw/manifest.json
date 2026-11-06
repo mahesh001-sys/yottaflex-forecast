@@ -16,7 +16,7 @@
       "file_size_bytes": 8677552,
       "filename": "forecast_snapshot.csv",
       "row_count": 93043,
-      "sha256": "0e1f5a8bce682b632bbaac0f8b252ba9ce5a765b09671cbf79c30c913e1cd1fd"
+      "sha256": "caa426b68f21cdfca1c6e6a7f5ba11fc1cc452624dcd1a96dd89564c70d591d8"
     },
     {
       "file_size_bytes": 222393,
@@ -28,7 +28,7 @@
       "file_size_bytes": 2904705,
       "filename": "opportunity.csv",
       "row_count": 20000,
-      "sha256": "cff67f1db8b82fdc0bb2a4085eee4ab63b0543d27d628205d0bdf6eae96f21b2"
+      "sha256": "7e0aea3c48bb7c631a53e4e42419c43d67057059f72d09f4c53814ad3760a6e4"
     },
     {
       "file_size_bytes": 896058,
@@ -55,10 +55,10 @@
       "sha256": "ec3ab6b4b85c4cf909b07be92d75fa18d55aeac43a79208f85d90e639cbe49a3"
     },
     {
-      "file_size_bytes": 11545741,
+      "file_size_bytes": 9135325,
       "filename": "stage_history.csv",
-      "row_count": 81428,
-      "sha256": "d19ccb980d8a7830dd812dd217888646b07e6ac8017a6ba7e38e6799f4acdac6"
+      "row_count": 64689,
+      "sha256": "e2cd2e63b3d6db0dd4b4d66ad9f62441a473c345f56138fd71f343e1baff5dad"
     },
     {
       "file_size_bytes": 300,
