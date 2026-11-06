@@ -1,4 +1,3 @@
-
 # YottaFlex Forecast — Sales Forecasting Proof of Concept
 
 A reproducible Python proof of concept (POC) for synthetic sales-pipeline management, weighted revenue forecasting, scenario analysis, historical forecast evaluation, and data-quality validation.
@@ -33,7 +32,7 @@ The resulting expected revenue can be grouped by:
 
 The project also evaluates historical forecasts against synthetic bookings and checks whether the information used in an earlier forecast was actually available on its snapshot date.
 
-This helps identify future-information leakage, which can make historical forecasts appear more accurate than they really were.
+This helps identify future-information leakage, which can make historical forecasts appear more accurate than they really are.
 
 ## 3. What Was Built?
 
@@ -49,15 +48,15 @@ The project includes:
 - Five labelled data anomalies for testing validation rules.
 - A SQLite database, SQL seed file, and JSON exports for all 11 tables.
 - An optional local Streamlit viewing page in `app.py`.
-- A Markdown validation summary with category-wise pass/fail counts.
-- A full-scale reproducibility test comparing row counts and SHA-256 checksums across two independent runs.
+- Markdown validation reports with category-wise pass/fail counts.
+- Full-scale reproducibility tests comparing row counts and SHA-256 checksums across independent runs.
 
 ### Technology Stack
 
 | Area | Technology |
 |---|---|
-| Programming language | Python |
-| Data processing | Pandas |
+| Programming language | Python 3.11+ |
+| Data processing | Pandas, NumPy |
 | Data storage | CSV, SQLite |
 | Data export | JSON |
 | Forecast calculations | Python |
@@ -81,12 +80,12 @@ The full dataset uses a fixed random seed (`20261022`) and generates 11 CSV tabl
 | Account | 2,000 |
 | Rep-territory assignment | 2,400 |
 | Opportunity | 20,000 |
-| Stage history | 81,428 |
+| Stage history | 64,689 |
 | Activity | 98,030 |
 | Quota | 16,000 |
 | Historical booking | 2,690 |
 | Forecast snapshot | 93,043 |
-| **Total** | **317,601** |
+| **Total** | **300,862** |
 
 The forecast snapshot table contains historical views of opportunities.
 
@@ -168,11 +167,30 @@ The POC uses fixed example probabilities for each sales stage.
 
 These are configured example assumptions, not probabilities learned from a machine-learning model.
 
-### Forecast Formula
+### Baseline Forecast Formula
 
 **Weighted expected revenue = Opportunity amount × Stage probability**
 
-The forecast adds the weighted opportunity values for the selected quarter, territory, and stage.
+The baseline forecast adds the weighted opportunity values for the selected quarter, territory, and stage.
+
+### Adjusted Forecast
+
+The adjusted forecast uses historical stage conversion information and additional opportunity-level factors.
+
+It calculates historical stage win rates using eligible previously closed opportunities and their last recorded stage before closure. It also applies opportunity-age and activity-related adjustments.
+
+The adjusted probability is calculated as:
+
+```text
+Adjusted probability =
+    Historical stage win rate
+    × Age factor
+    × Activity factor
+```
+
+The result is clipped to the range from 0 to 1.
+
+This is a rule-based adjustment, not a trained machine-learning model.
 
 ### Worked Example: $21,500 Weighted Revenue
 
@@ -194,7 +212,7 @@ They retain the same opportunities, amounts, and snapshot dates while changing t
 | Scenario | Calculation rule |
 |---|---|
 | Pessimistic | Baseline probability × 0.75; then expected revenue × 0.85 |
-| Baseline | Original stage probability and original amount |
+| Baseline | Original probability and original amount |
 | Optimistic | Baseline probability × 1.20, capped at 100%; amount unchanged |
 
 For the $21,500 example:
@@ -209,9 +227,11 @@ These are illustrative scenario outputs, not guarantees, statistical ranges, or 
 
 | Scenario | Full-dataset scenario total |
 |---|---:|
-| Pessimistic | $380,921,181.86 |
-| Baseline | $597,523,425.66 |
-| Optimistic | $717,028,101.60 |
+| Pessimistic | $278,037,828.51 |
+| Baseline | $436,137,776.70 |
+| Optimistic | $523,365,319.22 |
+
+These totals aggregate weighted scenario outputs across forecast snapshots. They are not actual booked revenue.
 
 ## 7. Accuracy and Data-Quality Checks
 
@@ -224,9 +244,9 @@ The validator runs 37 standard checks.
 | Category | Number of checks |
 |---|---:|
 | Primary-key checks | 11 |
-| Foreign-key checks | 15 |
+| Foreign-key checks | 20 |
 | Business-rule checks | 6 |
-| **Total** | **32** |
+| **Total** | **37** |
 
 The checks cover:
 
@@ -280,14 +300,28 @@ A verified run evaluated 11,931 opportunities.
 
 | Model | Brier score |
 |---|---:|
-| Baseline | 0.457913 |
-| Adjusted | 0.176031 |
+| Baseline | 0.127985 |
+| Adjusted | 0.079428 |
 
 For Brier score, lower is better.
 
-These results describe this synthetic dataset and this specific run only. They do not establish real-world forecasting accuracy.
+### Forecast Accuracy by Time-to-Close Horizon
 
-The full-run WAPE values are still high (roughly 140%–144% for the adjusted model across the overall horizon groups). Therefore, the adjusted model should not be presented as production-ready or highly accurate.
+The following results are from the verified snapshot-level evaluation.
+
+| Horizon | Baseline WAPE | Adjusted WAPE | Baseline bias | Adjusted bias |
+|---|---:|---:|---:|---:|
+| 0–30 days | 133.14% | 75.61% | +82.38% | -11.31% |
+| 31–60 days | 133.77% | 89.56% | +40.32% | -49.72% |
+| 61–90 days | 127.96% | 99.28% | +1.66% | -82.45% |
+| 91–180 days | 122.82% | 100.74% | -35.33% | -92.81% |
+| 181+ days | 123.26% | 101.94% | -56.74% | -96.03% |
+
+Lower WAPE indicates lower percentage error. Positive bias indicates overforecasting; negative bias indicates underforecasting.
+
+The adjusted model has lower WAPE than the baseline in all five horizon groups in this synthetic evaluation. However, its longer-horizon bias shows substantial underforecasting, and its WAPE remains high.
+
+These results describe this synthetic dataset and this specific run only. They do not establish real-world forecasting accuracy or production readiness.
 
 ## 8. The Five Injected Anomalies
 
@@ -318,7 +352,7 @@ Custom anomaly detections are reported separately from the 37 standard validatio
 ## 9. Project Structure
 
 ```text
-yottaflex-forecast/
+yottaflex-forecast-POC-/
 ├── app.py                         # Optional local Streamlit prototype
 ├── data/
 │   ├── raw/                       # Clean synthetic source CSVs + manifest
@@ -335,19 +369,19 @@ yottaflex-forecast/
 │       ├── clean-validation.png
 │       └── anomaly-detection.png
 ├── src/
-│   ├── generate_data.py            # Starter/full synthetic data generator
-│   ├── manifest.py                 # Create and verify CSV manifest
-│   ├── forecast.py                 # Baseline and adjusted forecast
-│   ├── scenarios.py                # Three what-if scenarios
-│   ├── evaluate.py                 # Historical forecast evaluation
-│   ├── check_integrity.py          # Primary-key and foreign-key checks
-│   ├── check_business_rules.py     # Business-rule checks
-│   ├── inject_anomalies.py         # Create five labelled anomalies
-│   ├── validate.py                 # Run checks and write validation reports
-│   ├── database.py                 # Build SQLite database and seed SQL
-│   ├── export_json.py              # Export SQLite tables to JSON
-│   └── profile_data.py             # Distribution profiling report
-├── tests/                          # Automated tests
+│   ├── generate_data.py           # Starter/full synthetic data generator
+│   ├── manifest.py                # Create and verify CSV manifest
+│   ├── forecast.py                # Baseline and adjusted forecast
+│   ├── scenarios.py               # Three what-if scenarios
+│   ├── evaluate.py                # Historical forecast evaluation
+│   ├── check_integrity.py         # Primary-key and foreign-key checks
+│   ├── check_business_rules.py    # Business-rule checks
+│   ├── inject_anomalies.py        # Create five labelled anomalies
+│   ├── validate.py                # Run checks and write validation reports
+│   ├── database.py                # Build SQLite database and seed SQL
+│   ├── export_json.py             # Export SQLite tables to JSON
+│   └── profile_data.py            # Distribution profiling report
+├── tests/                         # Automated tests
 ├── requirements.txt
 ├── .gitignore
 └── README.md
@@ -364,8 +398,8 @@ yottaflex-forecast/
 ### Clone the Repository
 
 ```bash
-git clone https://github.com/mahesh001-sys/yottaflex-forecast.git
-cd yottaflex-forecast
+git clone https://github.com/mahesh001-sys/yottaflex-forecast-POC-.git
+cd yottaflex-forecast-POC-
 ```
 
 ### Step 1 — Create and Activate a Virtual Environment
@@ -511,11 +545,13 @@ The verified full-size run completed with:
 
 | Verification area | Result |
 |---|---|
-| Synthetic source data | 317,601 rows across 11 CSV tables |
+| Synthetic source data | 300,862 rows across 11 CSV tables |
 | Forecast snapshots | 93,043 rows |
 | Scenario detail records | 279,129 rows |
 | Scenario summary records | 384 rows |
 | Historical accuracy results | 18,778 rows |
+| Historical evaluation detail | 105,910 rows |
+| Latest evaluation detail | 23,862 rows |
 | Primary-key checks | 11 passed |
 | Foreign-key checks | 20 passed |
 | Business-rule checks | 6 passed |
@@ -523,10 +559,11 @@ The verified full-size run completed with:
 | Clean dataset anomaly issues | 0 |
 | Injected anomalies detected | 5/5 |
 | Ground-truth recall | 100% |
+| SQLite integrity check | Passed |
 | SQLite foreign-key check | 0 violations |
 | CSV, SQLite, and JSON | Row counts matched for all 11 tables |
 | SQL weighted pipeline totals | Matched independent pandas calculation by territory |
-| Automated test suite | 49 passed |
+| Automated test suite | 51 passed |
 | Full-scale reproducibility | SHA-256 comparison passed across all 11 tables |
 
 These results apply to the code, seed, and synthetic dataset used for this verification. They may change if the generator, assumptions, or seed changes.
@@ -539,9 +576,9 @@ The following screenshots provide terminal evidence from the verified runs.
 
 ### 12.1 Automated Test Suite
 
-**49 automated tests passed**, including the full-scale reproducibility test.
+**51 automated tests passed**, including the full-scale reproducibility test.
 
-![Automated test results — 49 passed](docs/screenshots/test-results.png)
+![Automated test results — 51 passed](docs/screenshots/test-results.png)
 
 ### 12.2 Clean Dataset Validation
 
@@ -559,9 +596,9 @@ All five deliberately injected anomalies were detected, achieving **100% ground-
 
 | Test | Verified result |
 |---|---:|
-| Automated tests | 49 passed |
+| Automated tests | 51 passed |
 | Primary-key validation | 11/11 passed |
-| Foreign-key validation | 15/15 passed |
+| Foreign-key validation | 20/20 passed |
 | Business-rule validation | 6/6 passed |
 | Clean dataset custom anomaly issues | 0 |
 | Anomaly detection | 5/5 detected |
@@ -576,7 +613,7 @@ It does **not** include:
 - A production-ready dashboard. The included `app.py` is only a small local Streamlit prototype.
 - A REST API or backend service for other applications.
 - A trained machine-learning forecasting model.
-- Probabilities learned from historical company outcomes; stage probabilities are fixed example assumptions.
+- Probabilities learned from historical company outcomes; stage probabilities are fixed example assumptions in the baseline.
 - Statistical confidence intervals or calibrated uncertainty bands.
 - Production authentication, user roles, deployment, monitoring, or live CRM integration.
 - Real customer data or a connection to a real sales system.
